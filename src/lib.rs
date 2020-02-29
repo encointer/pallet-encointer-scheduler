@@ -21,6 +21,7 @@
 //! - issuance of basic income
 //!
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![feature(vec_remove_item)]
 
 use support::{decl_module, decl_storage, decl_event, ensure,
