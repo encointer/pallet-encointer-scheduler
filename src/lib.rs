@@ -54,8 +54,8 @@ pub type ParticipantIndexType = u64;
 pub type MeetupIndexType = u64;
 pub type WitnessIndexType = u64;
 
-#[derive(Encode, Decode, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
+#[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum CeremonyPhaseType {
 	REGISTERING, 
 	ASSIGNING,
@@ -66,7 +66,6 @@ impl Default for CeremonyPhaseType {
 }
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
-//#[cfg_attr(feature = "std", derive(Debug))]
 pub struct Witness<Signature, AccountId> {
 	pub claim: ClaimOfAttendance<AccountId>,
 	pub signature: Signature,
@@ -74,7 +73,6 @@ pub struct Witness<Signature, AccountId> {
 }
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
-//#[cfg_attr(feature = "std", derive(Debug))]
 pub struct ClaimOfAttendance<AccountId> {
 	pub claimant_public: AccountId,
 	pub ceremony_index: CeremonyIndexType,
