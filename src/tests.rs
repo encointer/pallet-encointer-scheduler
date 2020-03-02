@@ -615,12 +615,13 @@ fn register_with_reputation_works() {
         
         // fake reputation registry for first ceremony
         EncointerCeremonies::register_verified_attendee(cindex, &get_accountid(alice));
+        assert!(EncointerCeremonies::is_verified_attendee(1, &get_accountid(alice)));
         let cindex = EncointerCeremonies::current_ceremony_index();
-        
+        println!("cindex {}", cindex);
         // wrong sender of good proof fails
-//        let proof = prove_attendance(get_accountid(alice_new), cindex-1, alice);
-//        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(charlie)), Some(proof))
-//            .is_err());
+        let proof = prove_attendance(get_accountid(alice_new), cindex-1, alice);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(charlie)), Some(proof))
+            .is_err());
 
         // see if Alice can register with her fresh key
         // for the next ceremony claiming her former attendance

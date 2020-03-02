@@ -187,10 +187,10 @@ decl_module! {
 				};
 				ensure!(p.ceremony_index < cindex, "proof is acausal"); 
 				ensure!(p.ceremony_index >= cindex-REPUTATION_LIFETIME, "proof is outdated");
-				ensure!(Self::is_verified_attendee(p.ceremony_index, &sender),
+				ensure!(Self::is_verified_attendee(p.ceremony_index, &p.attendee_public),
 					"former attendance has not been verified");
 				// this reputation must now be burned so it can not be used again
-				<IsVerifiedAttendee<T>>::insert(&cindex, &sender, false);
+				<IsVerifiedAttendee<T>>::insert(&p.ceremony_index, &p.attendee_public, false);
 				Self::register_former_verified_attendee(cindex, &sender);
 			};
 			<ParticipantRegistry<T>>::insert(&cindex, &new_count, &sender);
