@@ -17,7 +17,7 @@
 //! The Encointer Ceremonies module provides functionality for 
 //! - registering for upcoming ceremony
 //! - meetup assignment
-//! - witness registry
+//! - attestation registry
 //! - issuance of basic income
 //!
 
@@ -52,21 +52,21 @@ const SINGLE_MEETUP_INDEX: u64 = 1;
 pub type CeremonyIndexType = u32;
 pub type ParticipantIndexType = u64;
 pub type MeetupIndexType = u64;
-pub type WitnessIndexType = u64;
+pub type AttestationIndexType = u64;
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum CeremonyPhaseType {
 	REGISTERING, 
 	ASSIGNING,
-	WITNESSING, 	
+	ATTESTING, 	
 }
 impl Default for CeremonyPhaseType {
     fn default() -> Self { CeremonyPhaseType::REGISTERING }
 }
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
-pub struct Witness<Signature, AccountId> {
+pub struct Attestation<Signature, AccountId> {
 	pub claim: ClaimOfAttendance<AccountId>,
 	pub signature: Signature,
 	pub public: AccountId,
@@ -95,11 +95,11 @@ decl_storage! {
 		MeetupIndex get(meetup_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => MeetupIndexType;
 		MeetupCount get(meetup_count): MeetupIndexType;
 
-		// collect fellow meetup participants accounts who witnessed key account
+		// collect fellow meetup participants accounts who attestationed key account
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-		WitnessRegistry get(witness_registry): double_map CeremonyIndexType, blake2_256(WitnessIndexType) => Vec<T::AccountId>;
-		WitnessIndex get(witness_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => WitnessIndexType;
-		WitnessCount get(witness_count): WitnessIndexType;
+		AttestationRegistry get(attestation_registry): double_map CeremonyIndexType, blake2_256(AttestationIndexType) => Vec<T::AccountId>;
+		AttestationIndex get(attestation_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => AttestationIndexType;
+		AttestationCount get(attestation_count): AttestationIndexType;
 		// how many peers does each participants observe at their meetup
 		MeetupParticipantCountVote get(meetup_participant_count_vote): double_map CeremonyIndexType, blake2_256(T::AccountId) => u32;
 
@@ -130,9 +130,9 @@ decl_module! {
 						CeremonyPhaseType::ASSIGNING
 				},
 				CeremonyPhaseType::ASSIGNING => {
-						CeremonyPhaseType::WITNESSING
+						CeremonyPhaseType::ATTESTING
 				},
-				CeremonyPhaseType::WITNESSING => {
+				CeremonyPhaseType::ATTESTING => {
 						Self::issue_rewards();
 						let next_ceremony_index = match current_ceremony_index.checked_add(1) {
 							Some(v) => v,
@@ -173,56 +173,56 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn register_witnesses(origin, witnesses: Vec<Witness<T::Signature, T::AccountId>>) -> Result {
+		pub fn register_attestations(origin, attestations: Vec<Attestation<T::Signature, T::AccountId>>) -> Result {
 			let sender = ensure_signed(origin)?;
-			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::WITNESSING,			
-				"registering witnesses can only be done during WITNESSING phase");
+			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::ATTESTING,			
+				"registering attestations can only be done during ATTESTING phase");
 			let cindex = <CurrentCeremonyIndex>::get();
 			let meetup_index = Self::meetup_index(&cindex, &sender);
 			let mut meetup_participants = Self::meetup_registry(&cindex, &meetup_index);
 			ensure!(meetup_participants.contains(&sender), "origin not part of this meetup");
 			meetup_participants.retain(|x| x != &sender);
 			let num_registered = meetup_participants.len();
-			let num_signed = witnesses.len();
-			ensure!(num_signed <= num_registered, "can\'t have more witnesses than other meetup participants");
-			let mut verified_witness_accounts = vec!();
+			let num_signed = attestations.len();
+			ensure!(num_signed <= num_registered, "can\'t have more attestations than other meetup participants");
+			let mut verified_attestation_accounts = vec!();
 			let mut claim_n_participants = 0u32;
 			for w in 0..num_signed {
-				let witness = &witnesses[w];
-				let witness_account = &witnesses[w].public;
-				if meetup_participants.contains(witness_account) == false { 
-					print_utf8(b"ignoring witness that isn't a meetup participant");
+				let attestation = &attestations[w];
+				let attestation_account = &attestations[w].public;
+				if meetup_participants.contains(attestation_account) == false { 
+					print_utf8(b"ignoring attestation that isn't a meetup participant");
 					continue };
-				if witness.claim.ceremony_index != cindex { 
+				if attestation.claim.ceremony_index != cindex { 
 					print_utf8(b"ignoring claim with wrong ceremony index");
 					continue };
-				if witness.claim.meetup_index != meetup_index { 
+				if attestation.claim.meetup_index != meetup_index { 
 					print_utf8(b"ignoring claim with wrong meetup index");
 					continue };
-				if Self::verify_witness_signature(witness.clone()).is_err() { 
-					print_utf8(b"ignoring witness with bad signature");
+				if Self::verify_attestation_signature(attestation.clone()).is_err() { 
+					print_utf8(b"ignoring attestation with bad signature");
 					continue };
-				// witness is legit. insert it!
-				verified_witness_accounts.insert(0, witness_account.clone());
+				// attestation is legit. insert it!
+				verified_attestation_accounts.insert(0, attestation_account.clone());
 				// is it a problem if this number isn't equal for all claims? Guess not.
-				claim_n_participants = witness.claim.number_of_participants_confirmed;
+				claim_n_participants = attestation.claim.number_of_participants_confirmed;
 			}
-			if verified_witness_accounts.len() == 0 {
-				return Err("no valid witnesses found");
+			if verified_attestation_accounts.len() == 0 {
+				return Err("no valid attestations found");
 			}
 
-			let count = <WitnessCount>::get();
+			let count = <AttestationCount>::get();
 			let mut idx = count+1;
 
-			if <WitnessIndex<T>>::exists(&cindex, &sender) {
-				idx = <WitnessIndex<T>>::get(&cindex, &sender);
+			if <AttestationIndex<T>>::exists(&cindex, &sender) {
+				idx = <AttestationIndex<T>>::get(&cindex, &sender);
 			} else {
 				let new_count = count.checked_add(1).
-            		ok_or("[EncointerCeremonies]: Overflow adding new witness to registry")?;
-				<WitnessCount>::put(new_count);
+            		ok_or("[EncointerCeremonies]: Overflow adding new attestation to registry")?;
+				<AttestationCount>::put(new_count);
 			}
-			<WitnessRegistry<T>>::insert(&cindex, &idx, &verified_witness_accounts);
-			<WitnessIndex<T>>::insert(&cindex, &sender, &idx);
+			<AttestationRegistry<T>>::insert(&cindex, &idx, &verified_attestation_accounts);
+			<AttestationIndex<T>>::insert(&cindex, &sender, &idx);
 			<MeetupParticipantCountVote<T>>::insert(&cindex, &sender, &claim_n_participants);
 			Ok(())
 		}
@@ -245,9 +245,9 @@ impl<T: Trait> Module<T> {
 		<MeetupRegistry<T>>::remove_prefix(&index);
 		<MeetupIndex<T>>::remove_prefix(&index);
 		<MeetupCount>::put(0);
-		<WitnessRegistry<T>>::remove_prefix(&index);
-		<WitnessIndex<T>>::remove_prefix(&index);
-		<WitnessCount>::put(0);
+		<AttestationRegistry<T>>::remove_prefix(&index);
+		<AttestationIndex<T>>::remove_prefix(&index);
+		<AttestationCount>::put(0);
 		<MeetupParticipantCountVote<T>>::remove_prefix(&index);
 		Ok(())
 	}
@@ -271,11 +271,11 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	fn verify_witness_signature(witness: Witness<T::Signature, T::AccountId>) -> Result {
-		ensure!(witness.public != witness.claim.claimant_public, "witness may not be self-signed");
-		match witness.signature.verify(&witness.claim.encode()[..], &witness.public) {
+	fn verify_attestation_signature(attestation: Attestation<T::Signature, T::AccountId>) -> Result {
+		ensure!(attestation.public != attestation.claim.claimant_public, "attestation may not be self-signed");
+		match attestation.signature.verify(&attestation.claim.encode()[..], &attestation.public) {
 			true => Ok(()),
-			false => Err("witness signature is invalid")
+			false => Err("attestation signature is invalid")
 		}
 	}
 
@@ -284,8 +284,8 @@ impl<T: Trait> Module<T> {
 	// as this function can only be called by the ceremony state machine, it could actually work out fine
 	// on-chain. It would just delay the next block once per ceremony cycle.
 	fn issue_rewards() -> Result {
-		ensure!(Self::current_phase() == CeremonyPhaseType::WITNESSING,			
-			"issuance can only be called at the end of WITNESSING phase");
+		ensure!(Self::current_phase() == CeremonyPhaseType::ATTESTING,			
+			"issuance can only be called at the end of ATTESTING phase");
 		let cindex = Self::current_ceremony_index();
 		let meetup_count = Self::meetup_count();
 		let reward = Self::ceremony_reward();		
@@ -305,20 +305,20 @@ impl<T: Trait> Module<T> {
 				if Self::meetup_participant_count_vote(&cindex, &p) != n_confirmed {
 					print_utf8(b"skipped participant because of wrong participant count vote");
 					continue; }
-				let witnesses = Self::witness_registry(&cindex, 
-					&Self::witness_index(&cindex, &p));
-				if witnesses.len() < (n_honest_participants - 1) as usize || witnesses.is_empty() {
-					print_utf8(b"skipped participant because of too few witnesses");
+				let attestations = Self::attestation_registry(&cindex, 
+					&Self::attestation_index(&cindex, &p));
+				if attestations.len() < (n_honest_participants - 1) as usize || attestations.is_empty() {
+					print_utf8(b"skipped participant because of too few attestations");
 					continue; }
-				let mut has_witnessed = 0u32;
-				for w in witnesses {
-					let w_witnesses = Self::witness_registry(&cindex, 
-					&Self::witness_index(&cindex, &w));
-					if w_witnesses.contains(&p) {
-						has_witnessed += 1;
+				let mut has_attestationed = 0u32;
+				for w in attestations {
+					let w_attestations = Self::attestation_registry(&cindex, 
+					&Self::attestation_index(&cindex, &w));
+					if w_attestations.contains(&p) {
+						has_attestationed += 1;
 					}
 				}
-				if has_witnessed < (n_honest_participants - 1) {
+				if has_attestationed < (n_honest_participants - 1) {
 					print_utf8(b"skipped participant because didn't testify for honest peers");
 					continue; }					
 				// TODO: check that p also signed others
