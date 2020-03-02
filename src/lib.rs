@@ -22,7 +22,6 @@
 //!
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![feature(vec_remove_item)]
 
 use support::{decl_module, decl_storage, decl_event, ensure,
 	storage::{StorageDoubleMap, StorageMap, StorageValue},
@@ -182,7 +181,7 @@ decl_module! {
 			let meetup_index = Self::meetup_index(&cindex, &sender);
 			let mut meetup_participants = Self::meetup_registry(&cindex, &meetup_index);
 			ensure!(meetup_participants.contains(&sender), "origin not part of this meetup");
-			meetup_participants.remove_item(&sender);
+			meetup_participants.retain(|x| x != &sender);
 			let num_registered = meetup_participants.len();
 			let num_signed = witnesses.len();
 			ensure!(num_signed <= num_registered, "can\'t have more witnesses than other meetup participants");
