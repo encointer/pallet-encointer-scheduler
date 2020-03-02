@@ -42,6 +42,7 @@ pub type BlockNumber = u64;
 pub type Balance = u64;
 
 type TestAttestation = Attestation<Signature, AccountId>;
+type TestProofOfAttendance = ProofOfAttendance<Signature, AccountId>;
 
 pub struct ExistentialDeposit;
 impl Get<u64> for ExistentialDeposit {
@@ -144,16 +145,26 @@ fn meetup_claim_sign(claimant: AccountId, attester: AccountKeyring, n_participan
     }
 }
 
+fn prove_attendance(prover: AccountId, cindex: CeremonyIndexType, attendee: AccountKeyring) -> TestProofOfAttendance {
+    let msg = (prover.clone(), cindex);
+    ProofOfAttendance{
+        prover_public: prover,
+        ceremony_index: cindex,
+        attendee_public: get_accountid(attendee),
+        attendee_signature: Signature::from(attendee.sign(&msg.encode())),
+    }
+}
+
 fn register_alice_bob_ferdie() {
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Alice))));
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Bob))));
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Ferdie))));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Alice)), None));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Bob)), None));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Ferdie)), None));
 }
 
 fn register_charlie_dave_eve() {
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Charlie))));
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Dave))));
-    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Eve))));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Charlie)), None));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Dave)), None));
+    assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(AccountKeyring::Eve)), None));
 }
 
 fn gets_attested_by(claimant: AccountId, attestations: Vec<AccountKeyring>, n_participants: u32) {
@@ -195,9 +206,9 @@ fn registering_participant_works() {
         let bob = AccountId::from(AccountKeyring::Bob);
         let cindex = EncointerCeremonies::current_ceremony_index();
         assert_eq!(EncointerCeremonies::participant_count(), 0);
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
         assert_eq!(EncointerCeremonies::participant_count(), 1);
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(bob.clone())));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(bob.clone()), None));
         assert_eq!(EncointerCeremonies::participant_count(), 2);
         assert_eq!(EncointerCeremonies::participant_index(&cindex, &bob), 2);
         assert_eq!(EncointerCeremonies::participant_registry(&cindex, &1), alice);
@@ -209,8 +220,8 @@ fn registering_participant_works() {
 fn registering_participant_twice_fails() {
     ExtBuilder::build().execute_with(|| {
         let alice = AccountId::from(AccountKeyring::Alice);
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())));
-        assert!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())).is_err());
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
+        assert!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None).is_err());
     });
 }
 
@@ -220,7 +231,7 @@ fn ceremony_index_and_purging_registry_works() {
         let master = AccountId::from(AccountKeyring::Alice);
         let alice = AccountId::from(AccountKeyring::Alice);
         let cindex = EncointerCeremonies::current_ceremony_index();
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
         assert_eq!(EncointerCeremonies::participant_registry(&cindex, &1), alice);
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // now assigning
@@ -245,7 +256,7 @@ fn registering_participant_in_wrong_phase_fails() {
         let alice = AccountId::from(AccountKeyring::Alice);
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_eq!(EncointerCeremonies::current_phase(), CeremonyPhaseType::ASSIGNING);
-        assert!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())).is_err());
+        assert!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None).is_err());
     });
 }
 
@@ -257,9 +268,9 @@ fn assigning_meetup_works() {
         let bob = AccountId::from(AccountKeyring::Bob);
         let ferdie = AccountId::from(AccountKeyring::Ferdie);
         let cindex = EncointerCeremonies::current_ceremony_index();
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())));
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(bob.clone())));
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(ferdie.clone())));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(bob.clone()), None));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(ferdie.clone()), None));
         assert_eq!(EncointerCeremonies::participant_count(), 3);
         //assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_ok!(EncointerCeremonies::assign_meetups());
@@ -282,7 +293,7 @@ fn assigning_meetup_at_phase_change_and_purge_works() {
         let master = AccountId::from(AccountKeyring::Alice);
         let alice = AccountId::from(AccountKeyring::Alice);
         let cindex = EncointerCeremonies::current_ceremony_index();
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone())));
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
         assert_eq!(EncointerCeremonies::meetup_index(&cindex, &alice), NONE);
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_eq!(EncointerCeremonies::meetup_index(&cindex, &alice), SINGLE_MEETUP_INDEX);
@@ -566,14 +577,66 @@ fn issue_reward_works() {
         gets_attested_by(get_accountid(eve), vec!(alice,bob,charlie,dave),5);
         gets_attested_by(get_accountid(ferdie), vec!(dave),6);
         assert_eq!(Balances::free_balance(&get_accountid(alice)), 0);
-
-        assert_ok!(EncointerCeremonies::issue_rewards());
+        
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // REGISTERING
+        //assert_ok!(EncointerCeremonies::issue_rewards());
 
         assert_eq!(Balances::free_balance(&get_accountid(alice)), REWARD);
         assert_eq!(Balances::free_balance(&get_accountid(bob)), REWARD);
         assert_eq!(Balances::free_balance(&get_accountid(charlie)), 0);
         assert_eq!(Balances::free_balance(&get_accountid(eve)), 0);
         assert_eq!(Balances::free_balance(&get_accountid(ferdie)), 0);
+
+        assert!(EncointerCeremonies::is_verified_attendee(&cindex, &get_accountid(alice)));
+        assert!(EncointerCeremonies::is_verified_attendee(&cindex, &get_accountid(bob)));
+        assert!(!EncointerCeremonies::is_verified_attendee(&cindex, &get_accountid(charlie)));
+        assert!(!EncointerCeremonies::is_verified_attendee(&cindex, &get_accountid(eve)));
+        assert!(!EncointerCeremonies::is_verified_attendee(&cindex, &get_accountid(ferdie)));
+        
+        // see if Alice can register (for simplicity with same keypair) 
+        // for the next ceremony claiming her former attendance
+        let proof = prove_attendance(get_accountid(alice), cindex, alice);
+    });
+}
+
+#[test]
+fn register_with_reputation_works() {
+    ExtBuilder::build().execute_with(|| {
+        let master = AccountId::from(AccountKeyring::Alice);
+        let alice = AccountKeyring::Alice;
+        let alice_new = AccountKeyring::Bob;
+        let charlie = AccountKeyring::Charlie;
+        let cindex = EncointerCeremonies::current_ceremony_index();			
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        
+        // fake reputation registry for first ceremony
+        EncointerCeremonies::register_verified_attendee(cindex, &get_accountid(alice));
+        let cindex = EncointerCeremonies::current_ceremony_index();
+        
+        // wrong sender of good proof fails
+//        let proof = prove_attendance(get_accountid(alice_new), cindex-1, alice);
+//        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(charlie)), Some(proof))
+//            .is_err());
+
+        // see if Alice can register with her fresh key
+        // for the next ceremony claiming her former attendance
+        let proof = prove_attendance(get_accountid(alice_new), cindex-1, alice);
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(alice_new)), Some(proof)));
+        assert!(EncointerCeremonies::is_former_verified_attendee(cindex, get_accountid(alice_new)));
+
+        // double signing (re-using reputation) fails
+        let proof_second = prove_attendance(get_accountid(charlie), cindex-1, alice);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(charlie)), Some(proof_second))
+            .is_err());
+
+        // signer without reputation fails
+        let proof = prove_attendance(get_accountid(charlie), cindex-1, charlie);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(charlie)), Some(proof))
+            .is_err());
     });
 }
 

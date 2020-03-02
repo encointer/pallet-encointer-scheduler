@@ -48,6 +48,7 @@ pub trait Trait: system::Trait + balances::Trait {
 }
 
 const SINGLE_MEETUP_INDEX: u64 = 1;
+const REPUTATION_LIFETIME: u32 = 1;
 
 pub type CeremonyIndexType = u32;
 pub type ParticipantIndexType = u64;
@@ -80,6 +81,15 @@ pub struct ClaimOfAttendance<AccountId> {
 	pub number_of_participants_confirmed: u32,
 }
 
+#[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
+pub struct ProofOfAttendance<Signature, AccountId> {
+	pub prover_public: AccountId,
+	pub ceremony_index: CeremonyIndexType,
+	pub attendee_public: AccountId,
+	pub attendee_signature: Signature
+}
+
+
 // This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as EncointerCeremonies {
@@ -88,7 +98,12 @@ decl_storage! {
 		ParticipantRegistry get(participant_registry): double_map CeremonyIndexType, blake2_256(ParticipantIndexType) => T::AccountId;
 		ParticipantIndex get(participant_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => ParticipantIndexType;
 		ParticipantCount get(participant_count): ParticipantIndexType;
+		IsFormerVerifiedAttendee get(is_former_verified_attendee): double_map CeremonyIndexType, blake2_256(T::AccountId) => bool;
 
+		// everyone who participated successfully in a previous ceremony
+		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
+		IsVerifiedAttendee get(is_verified_attendee): double_map CeremonyIndexType, blake2_256(T::AccountId) => bool;
+ 
 		// all meetups for each ceremony mapping to a vec of participants
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
 		MeetupRegistry get(meetup_registry): double_map CeremonyIndexType, blake2_256(MeetupIndexType) => Vec<T::AccountId>;
@@ -150,7 +165,7 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn register_participant(origin) -> Result {
+		pub fn register_participant(origin, proof: Option<ProofOfAttendance<T::Signature, T::AccountId>>) -> Result {
 			let sender = ensure_signed(origin)?;
 			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::REGISTERING,
 				"registering participants can only be done during REGISTERING phase");
@@ -165,11 +180,22 @@ decl_module! {
 			
 			let new_count = count.checked_add(1).
             	ok_or("[EncointerCeremonies]: Overflow adding new participant to registry")?;
-			
+			if let Some(p) = proof {
+				ensure!(sender == p.prover_public, "supplied proof is not proving sender");
+				if Self::verify_attendee_signature(p.clone()).is_err() { 
+					return Err("proof of attendance has bad signature");
+				};
+				ensure!(p.ceremony_index < cindex, "proof is acausal"); 
+				ensure!(p.ceremony_index >= cindex-REPUTATION_LIFETIME, "proof is outdated");
+				ensure!(Self::is_verified_attendee(p.ceremony_index, &sender),
+					"former attendance has not been verified");
+				// this reputation must now be burned so it can not be used again
+				<IsVerifiedAttendee<T>>::insert(&cindex, &sender, false);
+				Self::register_former_verified_attendee(cindex, &sender);
+			};
 			<ParticipantRegistry<T>>::insert(&cindex, &new_count, &sender);
 			<ParticipantIndex<T>>::insert(&cindex, &sender, &new_count);
 			<ParticipantCount>::put(new_count);
-
 			Ok(())
 		}
 
@@ -279,6 +305,24 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
+	fn register_verified_attendee(cindex: CeremonyIndexType, sender: &T::AccountId) {
+		<IsVerifiedAttendee<T>>::insert(&cindex, &sender, true);
+	} 
+	
+	fn register_former_verified_attendee(cindex: CeremonyIndexType, sender: &T::AccountId) {
+		<IsFormerVerifiedAttendee<T>>::insert(&cindex, &sender, true);
+	} 
+
+	fn verify_attendee_signature(proof: ProofOfAttendance<T::Signature, T::AccountId>) -> Result {
+		match proof.attendee_signature.verify(
+			&(proof.prover_public, proof.ceremony_index).encode()[..], 
+			&proof.attendee_public) {
+				true => Ok(()),
+				false => Err("attendee signature is invalid")
+		}
+	}
+
+
 	// this function takes O(n) for n meetups, so it should later be processed off-chain within 
 	// SubstraTEE-worker together with the entire registry
 	// as this function can only be called by the ceremony state machine, it could actually work out fine
@@ -328,6 +372,8 @@ impl<T: Trait> Module<T> {
 				let new_balance = old_balance.checked_add(&reward)
 					.expect("Balance should never overflow");
 				<balances::Module<T> as Currency<_>>::make_free_balance_be(&p, new_balance);
+				
+				Self::register_verified_attendee(cindex, &p);
 			}
 		}
 		Ok(())
