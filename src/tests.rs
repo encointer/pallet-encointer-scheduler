@@ -293,7 +293,7 @@ fn assigning_meetup_at_phase_change_and_purge_works() {
         let master = AccountId::from(AccountKeyring::Alice);
         let alice = AccountId::from(AccountKeyring::Alice);
         let cindex = EncointerCeremonies::current_ceremony_index();
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(alice.clone()), None));
+        register_alice_bob_ferdie();
         assert_eq!(EncointerCeremonies::meetup_index(&cindex, &alice), NONE);
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_eq!(EncointerCeremonies::meetup_index(&cindex, &alice), SINGLE_MEETUP_INDEX);
@@ -638,18 +638,68 @@ fn register_with_reputation_works() {
     });
 }
 
+/*
+#[test]
+fn test_random_permutation_works() {
+    ExtBuilder::build().execute_with(|| {
+        let ordered = vec!(1u8, 2, 3, 4, 5, 6);
+        let permutation = EncointerCeremonies::random_permutation(ordered);
+        println!("random permutation result {}", permutation);
+    });
+}
+*/
+
 #[test]
 fn assign_multiple_meetups_works() {
     ExtBuilder::build().execute_with(|| {
         let master = AccountId::from(AccountKeyring::Alice);
-        let mut participants = Vec::<sr25519::Pair>::with_capacity(24);
-        for i in 0u8..24 {
+        let mut participants = Vec::<sr25519::Pair>::with_capacity(64);
+        // generate many keys and register all of them
+        for i in 0u8..13 {
             let mut entropy = [0u8; 32];
             entropy[0] = i;
             let pair = sr25519::Pair::from_entropy(&entropy, None).0;
             participants.push(pair.clone());
             EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), None);
         }
-        let cindex = EncointerCeremonies::current_ceremony_index();		
+        let cindex = EncointerCeremonies::current_ceremony_index();	
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+
+        assert_eq!(EncointerCeremonies::meetup_count(), 2);
+        let meetup1_1 = EncointerCeremonies::meetup_registry(cindex, 1);
+        let meetup1_2 = EncointerCeremonies::meetup_registry(cindex, 2);
+        println!("ceremony 1 meetup 1 {:?}", meetup1_1);
+        
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));        
+        assert_eq!(EncointerCeremonies::current_phase(), CeremonyPhaseType::REGISTERING); 
+
+
+        // new participants without reputation want to join
+        for i in 13u8..26 {
+            let mut entropy = [0u8; 32];
+            entropy[0] = i;
+            let pair = sr25519::Pair::from_entropy(&entropy, None).0;
+            participants.push(pair.clone());
+        }
+        //register everyone
+        for p in participants.iter() {
+            EncointerCeremonies::register_participant(Origin::signed(get_accountid(&p)), None);
+        }
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+
+        //verify meetup assignment rules....
+
+        // whitepaper III-B Rule 1: minimize the number of participants that have met at previous ceremony
+        
+        // whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
+
+        // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
+        
+        
+
+
+
+
     });
 }

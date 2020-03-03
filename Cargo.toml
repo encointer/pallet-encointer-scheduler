@@ -53,16 +53,16 @@ features = ["derive"]
 optional = true
 version = "1.0.101"
 
+[dependencies.primitives]
+default-features = false
+git = "https://github.com/paritytech/substrate"
+package = "substrate-primitives"
+rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
+
 [dev-dependencies.node-primitives]
 default-features = false
 git = "https://github.com/paritytech/substrate"
 package = "node-primitives"
-rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
-
-[dev-dependencies.primitives]
-default-features = false
-git = "https://github.com/paritytech/substrate"
-package = "substrate-primitives"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
 
 [dev-dependencies.externalities]

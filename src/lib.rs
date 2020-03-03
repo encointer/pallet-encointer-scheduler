@@ -25,13 +25,14 @@
 
 use support::{decl_module, decl_storage, decl_event, ensure,
 	storage::{StorageDoubleMap, StorageMap, StorageValue},
-	traits::Currency,
+	traits::{Currency, Randomness},
 	dispatch::Result};
 use system::{ensure_signed, ensure_root};
 
 use rstd::prelude::*;
 use rstd::cmp::min;
 
+use primitives::{Blake2Hasher, Hasher};
 use sr_primitives::traits::{Verify, Member, CheckedAdd, IdentifyAccount};
 use sr_primitives::MultiSignature;
 use runtime_io::misc::print_utf8;
@@ -277,23 +278,86 @@ impl<T: Trait> Module<T> {
 		<MeetupParticipantCountVote<T>>::remove_prefix(&index);
 		Ok(())
 	}
-	
+
+	/* this is for a more recent revision of substrate....
+	fn random_permutation(elements: Vec<u8>) -> Vec<u8> {
+		let random_seed = <system::Module<T>>::random_seed();
+		let out = Vec::with_capacity(elements.len());
+		let n = elements.len();
+		for i in 0..n {
+			let new_random = (random_seed, i)
+				.using_encoded(|b| Blake2Hasher::hash(b))
+				.using_encoded(|mut b| u64::decode(&mut b))
+				.expect("Hash must be bigger than 8 bytes; Qed");
+			let elem = elements.remove(new_random % elements.len());
+			out.push(elem);
+		}
+		out
+	}
+	*/
+
 	// this function is expensive, so it should later be processed off-chain within SubstraTEE-worker
+	// currently the complexity is O(n) where n is the number of registered participants
 	fn assign_meetups() -> Result {
-		// for PoC1 we're assigning one single meetup with the first 12 participants only
-		//ensure!(<CurrentPhase>::get() == CeremonyPhaseType::ASSIGNING,
-		//		"registering meetups can only be done during ASSIGNING phase");
 		let cindex = <CurrentCeremonyIndex>::get();		
 		let pcount = <ParticipantCount>::get();		
-		let mut meetup = vec!();
+
+		let mut reputables = Vec::with_capacity(pcount as usize);
+		let mut newbies = Vec::with_capacity(pcount as usize);
 		
-		for p in 1..min(pcount+1, 12+1) {
+		// TODO: upfront random permutation
+		for p in 1..=pcount {
 			let participant = <ParticipantRegistry<T>>::get(&cindex, &p);
-			meetup.insert(meetup.len(), participant.clone());
-			<MeetupIndex<T>>::insert(&cindex, &participant, &SINGLE_MEETUP_INDEX);
+			// FIXME: the cindex==1 test is only valid before we have multiple currencies
+			if cindex == 1 || Self::is_former_verified_attendee(&cindex, &participant) {
+				reputables.push(participant);
+			} else {
+				newbies.push(participant);
+			}
 		}
-		<MeetupRegistry<T>>::insert(&cindex, &SINGLE_MEETUP_INDEX, &meetup);
-		<MeetupCount>::put(1);		
+		let mut n = reputables.len();
+		n += min(newbies.len(), n/4);
+		let n_meetups = n/12 + 1;
+		let mut meetups = Vec::with_capacity(n_meetups);
+		let mut meetup_n_rep = vec![0; n_meetups];
+		for i in 0..n_meetups {
+			meetups.push(Vec::with_capacity(12))
+		}
+		// first, evenly assign reputables to meetups
+		for (i, p) in reputables.iter().enumerate() {
+			meetups[i % n_meetups].push(p);
+			meetup_n_rep[i % n_meetups] += 1;
+		}
+		// now, distribute newbies, complying with newbie limit per meetup
+		// FIXME: stop after skipping n_meetups newbies
+		for (i, p) in newbies.iter().enumerate() {
+			let _idx = i % n_meetups;
+			if meetups[_idx].len() < meetup_n_rep[_idx]*4/3 {
+				meetups[i % n_meetups].push(p);
+			} else {
+				print_utf8(b"had to skip one newbie");
+			}
+		}
+		// purge meetups that are too small
+		let mut toosmall = Vec::with_capacity(n_meetups);
+		for (i, m) in meetups.iter().enumerate() {
+			if m.len() < 3 {
+				toosmall.push(i);
+				print_utf8(b"one meetup can't take place because it is too small");
+			}
+		}
+		for i in toosmall { meetups.remove(i); }
+		// FIXME: with nightly we could do: meetups.drain_filter(|x| x.len() < 3).collect::<Vec<_>>();
+		
+		// commit result to state
+		<MeetupCount>::put(n_meetups as MeetupIndexType);	
+		for (i, m) in meetups.iter().enumerate() {
+			let _idx = (i+1) as MeetupIndexType;
+			for p in meetups[i].iter() {
+				<MeetupIndex<T>>::insert(&cindex, p, &_idx);
+			}				
+			<MeetupRegistry<T>>::insert(&cindex, &_idx, meetups[i].clone());
+		}
 		Ok(())
 	}
 
