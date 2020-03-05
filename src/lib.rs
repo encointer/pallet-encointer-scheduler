@@ -42,19 +42,21 @@ use codec::{Codec, Encode, Decode};
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 
-pub trait Trait: system::Trait + balances::Trait {
+use encointer_currencies::CurrencyIdentifier;
+
+pub trait Trait: system::Trait + balances::Trait + encointer_currencies::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
     type Public: IdentifyAccount<AccountId = Self::AccountId>;
     type Signature: Verify<Signer = Self::Public> + Member + Decode + Encode;
 }
 
-const SINGLE_MEETUP_INDEX: u64 = 1;
 const REPUTATION_LIFETIME: u32 = 1;
 
 pub type CeremonyIndexType = u32;
 pub type ParticipantIndexType = u64;
 pub type MeetupIndexType = u64;
 pub type AttestationIndexType = u64;
+pub type CurrencyCeremony = (CurrencyIdentifier, CeremonyIndexType);
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -65,6 +67,21 @@ pub enum CeremonyPhaseType {
 }
 impl Default for CeremonyPhaseType {
     fn default() -> Self { CeremonyPhaseType::REGISTERING }
+}
+
+#[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Reputation {
+	// no attestations for attendance claim
+	UNVERIFIED, 
+	// no attestation yet but linked to reputation
+	UNVERIFIED_REPUTABLE,
+	// verified former attendance that has not yet been linked to a new registration
+	VERIFIED_UNLINKED,
+	// verified former attendance that has already been linked to a new registration
+	VERIFIED_LINKED, 	
+}
+impl Default for Reputation {
+    fn default() -> Self { Reputation::UNVERIFIED }
 }
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
@@ -78,6 +95,7 @@ pub struct Attestation<Signature, AccountId> {
 pub struct ClaimOfAttendance<AccountId> {
 	pub claimant_public: AccountId,
 	pub ceremony_index: CeremonyIndexType,
+	pub currency_identifier: CurrencyIdentifier,
 	pub meetup_index: MeetupIndexType,
 	pub number_of_participants_confirmed: u32,
 }
@@ -86,6 +104,7 @@ pub struct ClaimOfAttendance<AccountId> {
 pub struct ProofOfAttendance<Signature, AccountId> {
 	pub prover_public: AccountId,
 	pub ceremony_index: CeremonyIndexType,
+	pub currency_identifier: CurrencyIdentifier,	
 	pub attendee_public: AccountId,
 	pub attendee_signature: Signature
 }
@@ -96,28 +115,24 @@ decl_storage! {
 	trait Store for Module<T: Trait> as EncointerCeremonies {
 		// everyone who registered for a ceremony
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-		ParticipantRegistry get(participant_registry): double_map CeremonyIndexType, blake2_256(ParticipantIndexType) => T::AccountId;
-		ParticipantIndex get(participant_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => ParticipantIndexType;
-		ParticipantCount get(participant_count): ParticipantIndexType;
-		IsFormerVerifiedAttendee get(is_former_verified_attendee): double_map CeremonyIndexType, blake2_256(T::AccountId) => bool;
+		ParticipantRegistry get(participant_registry): double_map CurrencyCeremony, blake2_256(ParticipantIndexType) => T::AccountId;
+		ParticipantIndex get(participant_index): double_map CurrencyCeremony, blake2_256(T::AccountId) => ParticipantIndexType;
+		ParticipantCount get(participant_count): map CurrencyCeremony => ParticipantIndexType;
+		ParticipantReputation get(participant_reputation): double_map CurrencyCeremony, blake2_256(T::AccountId) => Reputation;
 
-		// everyone who participated successfully in a previous ceremony
-		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-		IsVerifiedAttendee get(is_verified_attendee): double_map CeremonyIndexType, blake2_256(T::AccountId) => bool;
- 
 		// all meetups for each ceremony mapping to a vec of participants
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-		MeetupRegistry get(meetup_registry): double_map CeremonyIndexType, blake2_256(MeetupIndexType) => Vec<T::AccountId>;
-		MeetupIndex get(meetup_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => MeetupIndexType;
-		MeetupCount get(meetup_count): MeetupIndexType;
+		MeetupRegistry get(meetup_registry): double_map CurrencyCeremony, blake2_256(MeetupIndexType) => Vec<T::AccountId>;
+		MeetupIndex get(meetup_index): double_map CurrencyCeremony, blake2_256(T::AccountId) => MeetupIndexType;
+		MeetupCount get(meetup_count): map CurrencyCeremony => MeetupIndexType;
 
 		// collect fellow meetup participants accounts who attestationed key account
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-		AttestationRegistry get(attestation_registry): double_map CeremonyIndexType, blake2_256(AttestationIndexType) => Vec<T::AccountId>;
-		AttestationIndex get(attestation_index): double_map CeremonyIndexType, blake2_256(T::AccountId) => AttestationIndexType;
-		AttestationCount get(attestation_count): AttestationIndexType;
+		AttestationRegistry get(attestation_registry): double_map CurrencyCeremony, blake2_256(AttestationIndexType) => Vec<T::AccountId>;
+		AttestationIndex get(attestation_index): double_map CurrencyCeremony, blake2_256(T::AccountId) => AttestationIndexType;
+		AttestationCount get(attestation_count): map CurrencyCeremony => AttestationIndexType;
 		// how many peers does each participants observe at their meetup
-		MeetupParticipantCountVote get(meetup_participant_count_vote): double_map CeremonyIndexType, blake2_256(T::AccountId) => u32;
+		MeetupParticipantCountVote get(meetup_participant_count_vote): double_map CurrencyCeremony, blake2_256(T::AccountId) => u32;
 
 		// caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
 		CurrentCeremonyIndex get(current_ceremony_index) config(): CeremonyIndexType;
@@ -166,37 +181,46 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn register_participant(origin, proof: Option<ProofOfAttendance<T::Signature, T::AccountId>>) -> Result {
+		pub fn register_participant(origin, cid: CurrencyIdentifier, proof: Option<ProofOfAttendance<T::Signature, T::AccountId>>) -> Result {
 			let sender = ensure_signed(origin)?;
 			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::REGISTERING,
 				"registering participants can only be done during REGISTERING phase");
 
+			ensure!(<encointer_currencies::Module<T>>::currency_identifiers().contains(&cid), 
+				"CurrencyIdentifier not found");
+
 			let cindex = <CurrentCeremonyIndex>::get();
 
-			if <ParticipantIndex<T>>::exists(&cindex, &sender) {
+			if <ParticipantIndex<T>>::exists((cid, cindex), &sender) {
 				return Err("already registered participant")
 			}
 
-			let count = <ParticipantCount>::get();
+			let count = <ParticipantCount>::get((cid, cindex));
 			
 			let new_count = count.checked_add(1).
             	ok_or("[EncointerCeremonies]: Overflow adding new participant to registry")?;
 			if let Some(p) = proof {
+				// we accept proofs from other currencies as well. no need to ensure cid
 				ensure!(sender == p.prover_public, "supplied proof is not proving sender");
+				ensure!(p.ceremony_index < cindex, "proof is acausal"); 
+				ensure!(p.ceremony_index >= cindex-REPUTATION_LIFETIME, "proof is outdated");
+				ensure!(Self::participant_reputation(&(p.currency_identifier, p.ceremony_index), 
+					&p.attendee_public) == Reputation::VERIFIED_UNLINKED,
+					"former attendance has not been verified or has already been linked to other account");
 				if Self::verify_attendee_signature(p.clone()).is_err() { 
 					return Err("proof of attendance has bad signature");
 				};
-				ensure!(p.ceremony_index < cindex, "proof is acausal"); 
-				ensure!(p.ceremony_index >= cindex-REPUTATION_LIFETIME, "proof is outdated");
-				ensure!(Self::is_verified_attendee(p.ceremony_index, &p.attendee_public),
-					"former attendance has not been verified");
+	
 				// this reputation must now be burned so it can not be used again
-				<IsVerifiedAttendee<T>>::insert(&p.ceremony_index, &p.attendee_public, false);
-				Self::register_former_verified_attendee(cindex, &sender);
+				<ParticipantReputation<T>>::insert(&(p.currency_identifier, p.ceremony_index), 
+					&p.attendee_public, Reputation::VERIFIED_LINKED);
+				// register participant as reputable
+				<ParticipantReputation<T>>::insert((cid, cindex), 
+					&p.attendee_public, Reputation::UNVERIFIED_REPUTABLE);
 			};
-			<ParticipantRegistry<T>>::insert(&cindex, &new_count, &sender);
-			<ParticipantIndex<T>>::insert(&cindex, &sender, &new_count);
-			<ParticipantCount>::put(new_count);
+			<ParticipantRegistry<T>>::insert((cid, cindex), &new_count, &sender);
+			<ParticipantIndex<T>>::insert((cid, cindex), &sender, &new_count);
+			<ParticipantCount>::insert((cid, cindex), new_count);
 			Ok(())
 		}
 
@@ -205,8 +229,13 @@ decl_module! {
 			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::ATTESTING,			
 				"registering attestations can only be done during ATTESTING phase");
 			let cindex = <CurrentCeremonyIndex>::get();
-			let meetup_index = Self::meetup_index(&cindex, &sender);
-			let mut meetup_participants = Self::meetup_registry(&cindex, &meetup_index);
+			ensure!(attestations.len()>0, "empty attestations supplied");
+			let cid = attestations[0].claim.currency_identifier;
+			ensure!(<encointer_currencies::Module<T>>::currency_identifiers().contains(&cid), 
+				"CurrencyIdentifier not found");
+
+			let meetup_index = Self::meetup_index((cid, cindex), &sender);
+			let mut meetup_participants = Self::meetup_registry((cid, cindex), &meetup_index);
 			ensure!(meetup_participants.contains(&sender), "origin not part of this meetup");
 			meetup_participants.retain(|x| x != &sender);
 			let num_registered = meetup_participants.len();
@@ -223,6 +252,9 @@ decl_module! {
 				if attestation.claim.ceremony_index != cindex { 
 					print_utf8(b"ignoring claim with wrong ceremony index");
 					continue };
+				if attestation.claim.currency_identifier != cid { 
+					print_utf8(b"ignoring claim with wrong currency identifier");
+					continue };
 				if attestation.claim.meetup_index != meetup_index { 
 					print_utf8(b"ignoring claim with wrong meetup index");
 					continue };
@@ -238,19 +270,19 @@ decl_module! {
 				return Err("no valid attestations found");
 			}
 
-			let count = <AttestationCount>::get();
+			let count = <AttestationCount>::get((cid, cindex));
 			let mut idx = count+1;
 
-			if <AttestationIndex<T>>::exists(&cindex, &sender) {
-				idx = <AttestationIndex<T>>::get(&cindex, &sender);
+			if <AttestationIndex<T>>::exists((cid, cindex), &sender) {
+				idx = <AttestationIndex<T>>::get((cid, cindex), &sender);
 			} else {
 				let new_count = count.checked_add(1).
             		ok_or("[EncointerCeremonies]: Overflow adding new attestation to registry")?;
-				<AttestationCount>::put(new_count);
+				<AttestationCount>::insert((cid, cindex), new_count);
 			}
-			<AttestationRegistry<T>>::insert(&cindex, &idx, &verified_attestation_accounts);
-			<AttestationIndex<T>>::insert(&cindex, &sender, &idx);
-			<MeetupParticipantCountVote<T>>::insert(&cindex, &sender, &claim_n_participants);
+			<AttestationRegistry<T>>::insert((cid, cindex), &idx, &verified_attestation_accounts);
+			<AttestationIndex<T>>::insert((cid, cindex), &sender, &idx);
+			<MeetupParticipantCountVote<T>>::insert((cid, cindex), &sender, &claim_n_participants);
 			Ok(())
 		}
 	}
@@ -265,17 +297,20 @@ decl_event!(
 
 
 impl<T: Trait> Module<T> {
-	fn purge_registry(index: CeremonyIndexType) -> Result {
-		<ParticipantRegistry<T>>::remove_prefix(&index);
-		<ParticipantIndex<T>>::remove_prefix(&index);
-		<ParticipantCount>::put(0);
-		<MeetupRegistry<T>>::remove_prefix(&index);
-		<MeetupIndex<T>>::remove_prefix(&index);
-		<MeetupCount>::put(0);
-		<AttestationRegistry<T>>::remove_prefix(&index);
-		<AttestationIndex<T>>::remove_prefix(&index);
-		<AttestationCount>::put(0);
-		<MeetupParticipantCountVote<T>>::remove_prefix(&index);
+	fn purge_registry(cindex: CeremonyIndexType) -> Result {
+		let cids = <encointer_currencies::Module<T>>::currency_identifiers();
+		for cid in cids.iter() {
+			<ParticipantRegistry<T>>::remove_prefix((cid, cindex));
+			<ParticipantIndex<T>>::remove_prefix((cid, cindex));
+			<ParticipantCount>::insert((cid, cindex), 0);
+			<MeetupRegistry<T>>::remove_prefix((cid, cindex));
+			<MeetupIndex<T>>::remove_prefix((cid, cindex));
+			<MeetupCount>::insert((cid, cindex), 0);
+			<AttestationRegistry<T>>::remove_prefix((cid, cindex));
+			<AttestationIndex<T>>::remove_prefix((cid, cindex));
+			<AttestationCount>::insert((cid, cindex), 0);
+			<MeetupParticipantCountVote<T>>::remove_prefix((cid, cindex));
+		}
 		Ok(())
 	}
 
@@ -299,64 +334,68 @@ impl<T: Trait> Module<T> {
 	// this function is expensive, so it should later be processed off-chain within SubstraTEE-worker
 	// currently the complexity is O(n) where n is the number of registered participants
 	fn assign_meetups() -> Result {
-		let cindex = <CurrentCeremonyIndex>::get();		
-		let pcount = <ParticipantCount>::get();		
+		let cids = <encointer_currencies::Module<T>>::currency_identifiers();
+		for cid in cids.iter() {
+			let cindex = <CurrentCeremonyIndex>::get();		
+			let pcount = <ParticipantCount>::get((cid, cindex));		
 
-		let mut reputables = Vec::with_capacity(pcount as usize);
-		let mut newbies = Vec::with_capacity(pcount as usize);
-		
-		// TODO: upfront random permutation
-		for p in 1..=pcount {
-			let participant = <ParticipantRegistry<T>>::get(&cindex, &p);
-			// FIXME: the cindex==1 test is only valid before we have multiple currencies
-			if cindex == 1 || Self::is_former_verified_attendee(&cindex, &participant) {
-				reputables.push(participant);
-			} else {
-				newbies.push(participant);
+			let mut reputables = Vec::with_capacity(pcount as usize);
+			let mut newbies = Vec::with_capacity(pcount as usize);
+			
+			// TODO: upfront random permutation
+			for p in 1..=pcount {
+				let participant = <ParticipantRegistry<T>>::get((cid, cindex), &p);
+				if Self::participant_reputation((cid, cindex), &participant) == Reputation::UNVERIFIED_REPUTABLE
+					|| <encointer_currencies::Module<T>>::bootstrappers(cid).contains(&participant) 
+				{
+					reputables.push(participant);
+				} else {
+					newbies.push(participant);
+				}
 			}
-		}
-		let mut n = reputables.len();
-		n += min(newbies.len(), n/4);
-		let n_meetups = n/12 + 1;
-		let mut meetups = Vec::with_capacity(n_meetups);
-		let mut meetup_n_rep = vec![0; n_meetups];
-		for i in 0..n_meetups {
-			meetups.push(Vec::with_capacity(12))
-		}
-		// first, evenly assign reputables to meetups
-		for (i, p) in reputables.iter().enumerate() {
-			meetups[i % n_meetups].push(p);
-			meetup_n_rep[i % n_meetups] += 1;
-		}
-		// now, distribute newbies, complying with newbie limit per meetup
-		// FIXME: stop after skipping n_meetups newbies
-		for (i, p) in newbies.iter().enumerate() {
-			let _idx = i % n_meetups;
-			if meetups[_idx].len() < meetup_n_rep[_idx]*4/3 {
+			let mut n = reputables.len();
+			n += min(newbies.len(), n/4);
+			let n_meetups = n/12 + 1;
+			let mut meetups = Vec::with_capacity(n_meetups);
+			let mut meetup_n_rep = vec![0; n_meetups];
+			for i in 0..n_meetups {
+				meetups.push(Vec::with_capacity(12))
+			}
+			// first, evenly assign reputables to meetups
+			for (i, p) in reputables.iter().enumerate() {
 				meetups[i % n_meetups].push(p);
-			} else {
-				print_utf8(b"had to skip one newbie");
+				meetup_n_rep[i % n_meetups] += 1;
 			}
-		}
-		// purge meetups that are too small
-		let mut toosmall = Vec::with_capacity(n_meetups);
-		for (i, m) in meetups.iter().enumerate() {
-			if m.len() < 3 {
-				toosmall.push(i);
-				print_utf8(b"one meetup can't take place because it is too small");
+			// now, distribute newbies, complying with newbie limit per meetup
+			// FIXME: stop after skipping n_meetups newbies
+			for (i, p) in newbies.iter().enumerate() {
+				let _idx = i % n_meetups;
+				if meetups[_idx].len() < meetup_n_rep[_idx]*4/3 {
+					meetups[i % n_meetups].push(p);
+				} else {
+					print_utf8(b"had to skip one newbie");
+				}
 			}
-		}
-		for i in toosmall { meetups.remove(i); }
-		// FIXME: with nightly we could do: meetups.drain_filter(|x| x.len() < 3).collect::<Vec<_>>();
-		
-		// commit result to state
-		<MeetupCount>::put(n_meetups as MeetupIndexType);	
-		for (i, m) in meetups.iter().enumerate() {
-			let _idx = (i+1) as MeetupIndexType;
-			for p in meetups[i].iter() {
-				<MeetupIndex<T>>::insert(&cindex, p, &_idx);
-			}				
-			<MeetupRegistry<T>>::insert(&cindex, &_idx, meetups[i].clone());
+			// purge meetups that are too small
+			let mut toosmall = Vec::with_capacity(n_meetups);
+			for (i, m) in meetups.iter().enumerate() {
+				if m.len() < 3 {
+					toosmall.push(i);
+					print_utf8(b"one meetup can't take place because it is too small");
+				}
+			}
+			for i in toosmall { meetups.remove(i); }
+			// FIXME: with nightly we could do: meetups.drain_filter(|x| x.len() < 3).collect::<Vec<_>>();
+			
+			// commit result to state
+			<MeetupCount>::insert((cid, cindex), n_meetups as MeetupIndexType);	
+			for (i, m) in meetups.iter().enumerate() {
+				let _idx = (i+1) as MeetupIndexType;
+				for p in meetups[i].iter() {
+					<MeetupIndex<T>>::insert((cid, cindex), p, &_idx);
+				}				
+				<MeetupRegistry<T>>::insert((cid, cindex), &_idx, meetups[i].clone());
+			}
 		}
 		Ok(())
 	}
@@ -368,14 +407,6 @@ impl<T: Trait> Module<T> {
 			false => Err("attestation signature is invalid")
 		}
 	}
-
-	fn register_verified_attendee(cindex: CeremonyIndexType, sender: &T::AccountId) {
-		<IsVerifiedAttendee<T>>::insert(&cindex, &sender, true);
-	} 
-	
-	fn register_former_verified_attendee(cindex: CeremonyIndexType, sender: &T::AccountId) {
-		<IsFormerVerifiedAttendee<T>>::insert(&cindex, &sender, true);
-	} 
 
 	fn verify_attendee_signature(proof: ProofOfAttendance<T::Signature, T::AccountId>) -> Result {
 		match proof.attendee_signature.verify(
@@ -392,64 +423,67 @@ impl<T: Trait> Module<T> {
 	// as this function can only be called by the ceremony state machine, it could actually work out fine
 	// on-chain. It would just delay the next block once per ceremony cycle.
 	fn issue_rewards() -> Result {
-		ensure!(Self::current_phase() == CeremonyPhaseType::ATTESTING,			
-			"issuance can only be called at the end of ATTESTING phase");
-		let cindex = Self::current_ceremony_index();
-		let meetup_count = Self::meetup_count();
-		let reward = Self::ceremony_reward();		
-		ensure!(meetup_count == 1, "registry must contain exactly one meetup for PoC1");
+		let cids = <encointer_currencies::Module<T>>::currency_identifiers();
+		for cid in cids.iter() {
+			ensure!(Self::current_phase() == CeremonyPhaseType::ATTESTING,			
+				"issuance can only be called at the end of ATTESTING phase");
+			let cindex = Self::current_ceremony_index();
+			let meetup_count = Self::meetup_count((cid, cindex));
+			let reward = Self::ceremony_reward();		
 
-		for m in 0..meetup_count {
-			// first, evaluate votes on how many participants showed up
-			let (n_confirmed, n_honest_participants) = match Self::ballot_meetup_n_votes(SINGLE_MEETUP_INDEX) {
-				Some(nn) => nn,
-				_ => {
-					print_utf8(b"skipping meetup because votes for num of participants are not dependable");
-					continue;
-				},
-			};
-			let mut meetup_participants = Self::meetup_registry(&cindex, &SINGLE_MEETUP_INDEX);
-			for p in meetup_participants {
-				if Self::meetup_participant_count_vote(&cindex, &p) != n_confirmed {
-					print_utf8(b"skipped participant because of wrong participant count vote");
-					continue; }
-				let attestations = Self::attestation_registry(&cindex, 
-					&Self::attestation_index(&cindex, &p));
-				if attestations.len() < (n_honest_participants - 1) as usize || attestations.is_empty() {
-					print_utf8(b"skipped participant because of too few attestations");
-					continue; }
-				let mut has_attestationed = 0u32;
-				for w in attestations {
-					let w_attestations = Self::attestation_registry(&cindex, 
-					&Self::attestation_index(&cindex, &w));
-					if w_attestations.contains(&p) {
-						has_attestationed += 1;
+			for m in 1..=meetup_count {
+				// first, evaluate votes on how many participants showed up
+				let (n_confirmed, n_honest_participants) = match Self::ballot_meetup_n_votes(cid, m) {
+					Some(nn) => nn,
+					_ => {
+						print_utf8(b"skipping meetup because votes for num of participants are not dependable");
+						continue;
+					},
+				};
+				let mut meetup_participants = Self::meetup_registry((cid, cindex), &m);
+				for p in meetup_participants {
+					if Self::meetup_participant_count_vote((cid, cindex), &p) != n_confirmed {
+						print_utf8(b"skipped participant because of wrong participant count vote");
+						continue; }
+					let attestations = Self::attestation_registry((cid, cindex), 
+						&Self::attestation_index((cid, cindex), &p));
+					if attestations.len() < (n_honest_participants - 1) as usize || attestations.is_empty() {
+						print_utf8(b"skipped participant because of too few attestations");
+						continue; }
+					let mut has_attestationed = 0u32;
+					for w in attestations {
+						let w_attestations = Self::attestation_registry((cid, cindex), 
+						&Self::attestation_index((cid, cindex), &w));
+						if w_attestations.contains(&p) {
+							has_attestationed += 1;
+						}
 					}
+					if has_attestationed < (n_honest_participants - 1) {
+						print_utf8(b"skipped participant because didn't testify for honest peers");
+						continue; }					
+					// TODO: check that p also signed others
+					// participant merits reward
+					print_utf8(b"participant merits reward");
+					let old_balance = <balances::Module<T>>::free_balance(&p);
+					let new_balance = old_balance.checked_add(&reward)
+						.expect("Balance should never overflow");
+					<balances::Module<T> as Currency<_>>::make_free_balance_be(&p, new_balance);
+					
+					<ParticipantReputation<T>>::insert((cid, cindex), 
+						&p, Reputation::VERIFIED_UNLINKED);
 				}
-				if has_attestationed < (n_honest_participants - 1) {
-					print_utf8(b"skipped participant because didn't testify for honest peers");
-					continue; }					
-				// TODO: check that p also signed others
-				// participant merits reward
-				print_utf8(b"participant merits reward");
-				let old_balance = <balances::Module<T>>::free_balance(&p);
-				let new_balance = old_balance.checked_add(&reward)
-					.expect("Balance should never overflow");
-				<balances::Module<T> as Currency<_>>::make_free_balance_be(&p, new_balance);
-				
-				Self::register_verified_attendee(cindex, &p);
 			}
 		}
 		Ok(())
 	}
 
-	fn ballot_meetup_n_votes(meetup_idx: MeetupIndexType) -> Option<(u32, u32)> {
+	fn ballot_meetup_n_votes(cid: &CurrencyIdentifier, meetup_idx: MeetupIndexType) -> Option<(u32, u32)> {
 		let cindex = Self::current_ceremony_index();
-		let meetup_participants = Self::meetup_registry(&cindex, &meetup_idx);
+		let meetup_participants = Self::meetup_registry((cid, cindex), &meetup_idx);
 		// first element is n, second the count of votes for n
 		let mut n_vote_candidates: Vec<(u32,u32)> = vec!(); 
 		for p in meetup_participants {
-			let this_vote = match Self::meetup_participant_count_vote(&cindex, &p) {
+			let this_vote = match Self::meetup_participant_count_vote((cid, cindex), &p) {
 				n if n > 0 => n,
 				_ => continue,
 			};

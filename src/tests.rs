@@ -31,6 +31,7 @@ use support::traits::{Currency, Get, FindAuthor, LockIdentifier};
 use sr_primitives::weights::Weight;
 use node_primitives::{AccountId, Signature};
 use test_client::AccountKeyring;
+use encointer_currencies::{Location, CurrencyIdentifier};
 
 const NONE: u64 = 0;
 const REWARD: Balance = 1000;
@@ -61,6 +62,12 @@ impl Trait for TestRuntime {
 }
 
 pub type EncointerCeremonies = Module<TestRuntime>;
+
+impl encointer_currencies::Trait for TestRuntime {
+    type Event = ();
+}
+
+pub type EncointerCurrencies = encointer_currencies::Module<TestRuntime>;
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -580,7 +587,6 @@ fn issue_reward_works() {
         
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // REGISTERING
-        //assert_ok!(EncointerCeremonies::issue_rewards());
 
         assert_eq!(Balances::free_balance(&get_accountid(&alice)), REWARD);
         assert_eq!(Balances::free_balance(&get_accountid(&bob)), REWARD);
@@ -695,10 +701,32 @@ fn assign_multiple_meetups_works() {
         // whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
 
         // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
-        
-        
+    });
+}
 
+fn register_test_currency() -> CurrencyIdentifier {
+    let alice = AccountId::from(AccountKeyring::Alice);
+    let bob = AccountId::from(AccountKeyring::Bob);
+    let ferdie = AccountId::from(AccountKeyring::Ferdie);
+    let a = Location {lat: 1_000_000, lon: 1_000_000 };
+    let b = Location {lat: 1_000_000, lon: 2_000_000 };
+    let c = Location {lat: 1_000_000, lon: 3_000_000 };
+    let loc = vec!(a,b,c);
+    let bs = vec!(alice.clone(), bob.clone(), ferdie.clone());
+    let cid = CurrencyIdentifier::default();
+    assert_ok!(EncointerCurrencies::new_currency(Origin::signed(alice.clone()), cid, loc, bs));
+}
 
+#[test]
+fn bootstrapping_works() {
+    ExtBuilder::build().execute_with(|| {
+        register_test_currency();
+        let master = AccountId::from(AccountKeyring::Alice);
+        let alice = AccountKeyring::Alice.pair();
+        let bob = AccountKeyring::Bob.pair();
+        let ferdie = AccountKeyring::Ferdie.pair();
+
+        // no one but the bootstrappers can start a currency
 
 
     });
