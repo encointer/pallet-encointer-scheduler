@@ -647,48 +647,113 @@ fn issue_reward_works() {
     });
 }
 
+fn perform_bootstrapping_ceremony() -> CurrencyIdentifier {
+    let cid = register_test_currency();
+    register_alice_bob_ferdie(cid);
+    register_charlie_dave_eve(cid);
+    let master = AccountId::from(AccountKeyring::Alice);
+    let alice = AccountKeyring::Alice.pair();
+    let bob = AccountKeyring::Bob.pair();
+    let charlie = AccountKeyring::Charlie.pair();
+    let dave = AccountKeyring::Dave.pair();
+    let eve = AccountKeyring::Eve.pair();
+    let ferdie = AccountKeyring::Ferdie.pair();
+
+    let cindex = EncointerCeremonies::current_ceremony_index();	
+    
+    assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+    // ASSIGNING
+    assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+    // ATTESTING
+
+    gets_attested_by(get_accountid(&alice), vec!(   &bob,&charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&bob), vec!(&alice,   &charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&charlie), vec!(&alice,&bob,   &dave,&eve,&ferdie), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&dave), vec!(&alice,&bob,&charlie,   &eve,&ferdie), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&eve), vec!(&alice,&bob,&charlie,&dave,   &ferdie), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&ferdie), vec!(&alice,&bob,&charlie,&dave,&eve   ), cid, 1, 1, 6);
+
+    assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+    // REGISTERING
+    cid
+}
+
+/* need keystore to proceed here
+fn fully_attest_meetup(cid: CurrencyIdentifier, mindex: MeetupIndexType) {
+    let cindex = EncointerCeremonies::current_ceremony_index();			
+    let meetup = EncointerCeremonies::meetup_registry((cid, cindex), mindex);
+    for p in meetup.iter() {
+        let mut others = meetup.clone();
+        others.retain(|&x| x != p);
+        gets_attested_by(p, vec!(   &bob,&charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
+    }
+}
+*/
+
+#[test]
+fn bootstrapping_works() {
+    ExtBuilder::build().execute_with(|| {
+        let cid = perform_bootstrapping_ceremony();
+        let master = AccountId::from(AccountKeyring::Alice);
+        let alice = AccountKeyring::Alice.pair();
+        let bob = AccountKeyring::Bob.pair();
+        let charlie = AccountKeyring::Charlie.pair();
+        let dave = AccountKeyring::Dave.pair();
+        let eve = AccountKeyring::Eve.pair();
+        let ferdie = AccountKeyring::Ferdie.pair();
+
+        let cindex = EncointerCeremonies::current_ceremony_index();	
+
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&alice)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&bob)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&charlie)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&dave)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&eve)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&ferdie)), Reputation::VERIFIED_UNLINKED);
+    });
+}
+
 #[test]
 fn register_with_reputation_works() {
     ExtBuilder::build().execute_with(|| {
-        let cid = register_test_currency();
+        let cid = perform_bootstrapping_ceremony();
         let master = AccountId::from(AccountKeyring::Alice);
-        let alice = AccountKeyring::Alice.pair();
-        let alice_new = AccountKeyring::Bob.pair();
-        let charlie = AccountKeyring::Charlie.pair();
-        let cindex = EncointerCeremonies::current_ceremony_index();			
 
-        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
-        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
-        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // a non-bootstrapper
+        let zoran = sr25519::Pair::from_entropy(&[9u8; 32], None).0;
+        let zoran_new = sr25519::Pair::from_entropy(&[8u8; 32], None).0;
+
+        // another non-bootstrapper
+        let yuri = sr25519::Pair::from_entropy(&[9u8; 32], None).0;
+
+        let cindex = EncointerCeremonies::current_ceremony_index();			
         
         // fake reputation registry for first ceremony
-        <Module<TestRuntime> as encointer_currencies::Trait>::ParticipantReputation::insert((cid, 1), 
-            &get_accountid(&alice), Reputation::VERIFIED_UNLINKED);
-//        EncointerCeremonies::register_verified_attendee(cindex, &get_accountid(&alice));
-//        assert!(EncointerCeremonies::participant_reputation((cid, 1), &get_accountid(&alice)) == Reputation::VERIFIED_UNLINKED);
+        EncointerCeremonies::fake_reputation((cid, cindex-1), &get_accountid(&zoran), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VERIFIED_UNLINKED);
 
         let cindex = EncointerCeremonies::current_ceremony_index();
         println!("cindex {}", cindex);
         // wrong sender of good proof fails
-        let proof = prove_attendance(get_accountid(&alice_new), cid, cindex-1, &alice);
-        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&charlie)), cid, Some(proof))
+        let proof = prove_attendance(get_accountid(&zoran_new), cid, cindex-1, &zoran);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&yuri)), cid, Some(proof))
             .is_err());
 
-        // see if Alice can register with her fresh key
-        // for the next ceremony claiming her former attendance
-        let proof = prove_attendance(get_accountid(&alice_new), cid, cindex-1, &alice);
-        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&alice_new)), cid, Some(proof)));
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&alice_new)), Reputation::UNVERIFIED_REPUTABLE);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&alice)), Reputation::VERIFIED_LINKED);
+        // see if Zoran can register with his fresh key
+        // for the next ceremony claiming his former attendance
+        let proof = prove_attendance(get_accountid(&zoran_new), cid, cindex-1, &zoran);
+        assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&zoran_new)), cid, Some(proof)));
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&zoran_new)), Reputation::UNVERIFIED_REPUTABLE);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VERIFIED_LINKED);
 
         // double signing (re-using reputation) fails
-        let proof_second = prove_attendance(get_accountid(&charlie), cid, cindex-1, &alice);
-        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&charlie)), cid, Some(proof_second))
+        let proof_second = prove_attendance(get_accountid(&yuri), cid, cindex-1, &zoran);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&yuri)), cid, Some(proof_second))
             .is_err());
 
         // signer without reputation fails
-        let proof = prove_attendance(get_accountid(&charlie), cid, cindex-1, &charlie);
-        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&charlie)), cid, Some(proof))
+        let proof = prove_attendance(get_accountid(&yuri), cid, cindex-1, &yuri);
+        assert!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&yuri)), cid, Some(proof))
             .is_err());
     });
 }
@@ -705,21 +770,39 @@ fn test_random_permutation_works() {
 */
 
 #[test]
-fn assign_multiple_meetups_works() {
+fn grow_population_works() {
     ExtBuilder::build().execute_with(|| {
-        let cid = register_test_currency();
+        let cid = perform_bootstrapping_ceremony();
+        let cindex = EncointerCeremonies::current_ceremony_index();	
+        // bootstrappers must register because only they have reputation now
+        register_alice_bob_ferdie(cid);
+        register_charlie_dave_eve(cid);
         let master = AccountId::from(AccountKeyring::Alice);
         let mut participants = Vec::<sr25519::Pair>::with_capacity(64);
         // generate many keys and register all of them
-        for i in 0u8..13 {
+        let mut population_counter = 0u8;
+        while population_counter < 6 {
             let mut entropy = [0u8; 32];
-            entropy[0] = i;
+            entropy[0] = population_counter;
             let pair = sr25519::Pair::from_entropy(&entropy, None).0;
             participants.push(pair.clone());
             EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), cid, None);
+            population_counter += 1;
         }
+
         let cindex = EncointerCeremonies::current_ceremony_index();	
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // ASSIGNING
+        assert_eq!(EncointerCeremonies::meetup_count((cid, cindex)), 1);
+        let meetup2_1 = EncointerCeremonies::meetup_registry((cid, cindex), 1);
+
+        // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
+        assert_eq!(meetup2_1.len(), 8);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // WITNESSING
+
+/*
 
         assert_eq!(EncointerCeremonies::meetup_count((cid, cindex)), 2);
         let meetup1_1 = EncointerCeremonies::meetup_registry((cid, cindex), 1);
@@ -751,20 +834,7 @@ fn assign_multiple_meetups_works() {
         // whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
 
         // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
-    });
-}
 
-#[test]
-fn bootstrapping_works() {
-    ExtBuilder::build().execute_with(|| {
-        let cid = register_test_currency();
-        let master = AccountId::from(AccountKeyring::Alice);
-        let alice = AccountKeyring::Alice.pair();
-        let bob = AccountKeyring::Bob.pair();
-        let ferdie = AccountKeyring::Ferdie.pair();
-
-        // no one but the bootstrappers can start a currency
-
-
+*/
     });
 }

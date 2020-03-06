@@ -216,7 +216,7 @@ decl_module! {
 					&p.attendee_public, Reputation::VERIFIED_LINKED);
 				// register participant as reputable
 				<ParticipantReputation<T>>::insert((cid, cindex), 
-					&p.attendee_public, Reputation::UNVERIFIED_REPUTABLE);
+					&sender, Reputation::UNVERIFIED_REPUTABLE);
 			};
 			<ParticipantRegistry<T>>::insert((cid, cindex), &new_count, &sender);
 			<ParticipantIndex<T>>::insert((cid, cindex), &sender, &new_count);
@@ -500,6 +500,13 @@ impl<T: Trait> Module<T> {
 		}
 		Some(n_vote_candidates[0])
 	}
+
+	#[cfg(test)]
+	// only to be used by tests
+	fn fake_reputation(cidcindex: CurrencyCeremony, account: &T::AccountId, rep: Reputation) {
+		<ParticipantReputation<T>>::insert(&cidcindex, account, rep);
+	}
+
 }
 
 
