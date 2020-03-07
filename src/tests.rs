@@ -700,7 +700,7 @@ fn fully_attest_meetup(cid: CurrencyIdentifier, keys: Vec<sr25519::Pair>, mindex
             }
         }
         println!("  length of attestors: {}", others.len());
-        gets_attested_by((*p).clone(), others, cid, cindex, 1, meetup.len() as u32);
+        gets_attested_by((*p).clone(), others, cid, cindex, mindex, meetup.len() as u32);
     }
 }
 
@@ -802,9 +802,10 @@ fn grow_population_works() {
         participants.push(AccountKeyring::Eve.pair());
         participants.push(AccountKeyring::Ferdie.pair());
 
-        // generate many keys and register all of them
+        // generate many keys and register all of them 
+        // they will use the same keys per participant throughout to following ceremonies
         let mut population_counter = 6u8;
-        while population_counter < 13 {
+        while population_counter < 20 {
             let mut entropy = [0u8; 32];
             entropy[0] = population_counter;
             let pair = sr25519::Pair::from_entropy(&entropy, None).0;
@@ -828,40 +829,60 @@ fn grow_population_works() {
 
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // REGISTERING
-
-/*
-
-        assert_eq!(EncointerCeremonies::meetup_count((cid, cindex)), 2);
-        let meetup1_1 = EncointerCeremonies::meetup_registry((cid, cindex), 1);
-        let meetup1_2 = EncointerCeremonies::meetup_registry((cid, cindex), 2);
-        println!("ceremony 1 meetup 1 {:?}", meetup1_1);
         
-        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
-        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));        
-        assert_eq!(EncointerCeremonies::current_phase(), CeremonyPhaseType::REGISTERING); 
-
-
-        // new participants without reputation want to join
-        for i in 13u8..26 {
-            let mut entropy = [0u8; 32];
-            entropy[0] = i;
-            let pair = sr25519::Pair::from_entropy(&entropy, None).0;
-            participants.push(pair.clone());
-        }
-        //register everyone
-        for p in participants.iter() {
-            EncointerCeremonies::register_participant(Origin::signed(get_accountid(&p)), cid, None);
+        let cindex = EncointerCeremonies::current_ceremony_index();	
+        // register everybody again. also those who didn't have the chance last time
+        for pair in participants.iter() {
+            let proof = match EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&pair)) {
+                Reputation::VERIFIED_UNLINKED => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
+                _ => None
+            };
+            EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), cid, proof);
         }
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // ASSIGNING
+        assert_eq!(EncointerCeremonies::meetup_count((cid, cindex)), 1);
+        let meetup3_1 = EncointerCeremonies::meetup_registry((cid, cindex), 1);
+        // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
+        assert_eq!(meetup3_1.len(), 10);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // WITNESSING
+        fully_attest_meetup(cid, participants.clone(), 1);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // REGISTERING
+
+        let cindex = EncointerCeremonies::current_ceremony_index();	
+        for pair in participants.iter() {
+            let proof = match EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&pair)) {
+                Reputation::VERIFIED_UNLINKED => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
+                _ => None
+            };
+            EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), cid, proof);
+        }
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // ASSIGNING
+        assert_eq!(EncointerCeremonies::meetup_count((cid, cindex)), 2);
+        let meetup4_1 = EncointerCeremonies::meetup_registry((cid, cindex), 1);
+        let meetup4_2 = EncointerCeremonies::meetup_registry((cid, cindex), 2);
+        
+        // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
+        assert!(meetup4_1.len() + meetup4_2.len() <= 13);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // WITNESSING
+        fully_attest_meetup(cid, participants.clone(), 1);
+        fully_attest_meetup(cid, participants.clone(), 2);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // REGISTERING
+
 
         //verify meetup assignment rules....
 
         // whitepaper III-B Rule 1: minimize the number of participants that have met at previous ceremony
         
         // whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
-
-        // whitepaper III-B Rule 3: no more than 1/4 participants without reputation
-
-*/
     });
 }
