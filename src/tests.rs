@@ -27,6 +27,7 @@ use sr_primitives::{Perbill, traits::{IdentityLookup, BlakeTwo256}, testing::Hea
 use std::{collections::HashSet, cell::RefCell};
 use externalities::set_and_run_with_externalities;
 use primitives::{H256, Blake2Hasher, Pair, Public, sr25519};
+use primitives::crypto::{Ss58Codec};
 use support::traits::{Currency, Get, FindAuthor, LockIdentifier};
 use sr_primitives::weights::Weight;
 use node_primitives::{AccountId, Signature};
@@ -181,17 +182,17 @@ fn register_charlie_dave_eve(cid: CurrencyIdentifier) {
     assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&AccountKeyring::Eve.pair())), cid, None));
 }
 
-fn gets_attested_by(claimant: AccountId, attestations: Vec<&sr25519::Pair>, 
+fn gets_attested_by(claimant: AccountId, attestors: Vec<sr25519::Pair>, 
     cid: CurrencyIdentifier, cindex: CeremonyIndexType, mindex: MeetupIndexType, n_participants: u32) {
-    let mut testimonials: Vec<TestAttestation> = vec!();
-    for a in attestations {
-        testimonials.insert(0, 
+    let mut attestations: Vec<TestAttestation> = vec!();
+    for a in attestors {
+        attestations.insert(0, 
             meetup_claim_sign(claimant.clone(), a.clone(), cid, cindex, mindex, n_participants));
         
     }
     assert_ok!(EncointerCeremonies::register_attestations(
             Origin::signed(claimant),
-            testimonials.clone()));	
+            attestations.clone()));	
 }
 
 fn get_accountid(pair: &sr25519::Pair) -> AccountId {
@@ -392,8 +393,8 @@ fn register_attestations_works() {
         // ATTESTING
         assert_eq!(EncointerCeremonies::meetup_index((cid, cindex), &get_accountid(&alice)), 1);
 
-        gets_attested_by(get_accountid(&alice), vec!(&bob,&ferdie), cid ,1, 1, 3);
-        gets_attested_by(get_accountid(&bob), vec!(&alice,&ferdie), cid, 1, 1, 3);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone(),ferdie.clone()), cid ,1, 1, 3);
+        gets_attested_by(get_accountid(&bob), vec!(alice.clone(),ferdie.clone()), cid, 1, 1, 3);
 
         assert_eq!(EncointerCeremonies::attestation_count((cid, cindex)), 2);
         assert_eq!(EncointerCeremonies::attestation_index((cid, cindex), &get_accountid(&bob)), 2);
@@ -403,7 +404,7 @@ fn register_attestations_works() {
         assert!(wit_vec.contains(&get_accountid(&ferdie)));
 
         // TEST: re-registering must overwrite previous entry
-        gets_attested_by(get_accountid(&alice), vec!(&bob,&ferdie), cid, 1, 1, 3);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone(),ferdie.clone()), cid, 1, 1, 3);
         assert_eq!(EncointerCeremonies::attestation_count((cid, cindex)), 2);	
     });
 }
@@ -420,7 +421,7 @@ fn register_attestations_for_non_participant_fails_silently() {
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // ATTESTING
-        gets_attested_by(get_accountid(&alice), vec!(&bob,&alice), cid, 1, 1, 3);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone(),alice.clone()), cid, 1, 1, 3);
         assert_eq!(EncointerCeremonies::attestation_count((cid, cindex)), 1);	
         let wit_vec = EncointerCeremonies::attestation_registry((cid, cindex), &1);
         assert!(wit_vec.contains(&get_accountid(&alice)) == false);
@@ -466,7 +467,7 @@ fn register_attestations_with_non_participant_fails_silently() {
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // ATTESTING
-        gets_attested_by(get_accountid(&alice), vec!(&bob, &eve), cid, 1, 1, 3);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone(), eve.clone()), cid, 1, 1, 3);
         assert_eq!(EncointerCeremonies::attestation_count((cid, cindex)), 1);	
         let wit_vec = EncointerCeremonies::attestation_registry((cid, cindex), &1);
         assert!(wit_vec.contains(&get_accountid(&eve)) == false);
@@ -572,28 +573,28 @@ fn ballot_meetup_n_votes_works() {
         // ASSIGNING
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // ATTESTING
-        gets_attested_by(get_accountid(&alice), vec!(&bob), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&bob), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&charlie), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&dave), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&eve), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&ferdie), vec!(&dave), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&bob), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&charlie), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&dave), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&eve), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&ferdie), vec!(dave.clone()), cid, 1, 1, 6);
         assert!(EncointerCeremonies::ballot_meetup_n_votes(&cid, 1) == Some((5,5)));
 
-        gets_attested_by(get_accountid(&alice), vec!(&bob), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&bob), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&charlie), vec!(&alice), cid, 1, 1, 4);
-        gets_attested_by(get_accountid(&dave), vec!(&alice), cid, 1, 1, 4);
-        gets_attested_by(get_accountid(&eve), vec!(&alice), cid, 1, 1, 6);
-        gets_attested_by(get_accountid(&ferdie), vec!(&dave), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&bob), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&charlie), vec!(alice.clone()), cid, 1, 1, 4);
+        gets_attested_by(get_accountid(&dave), vec!(alice.clone()), cid, 1, 1, 4);
+        gets_attested_by(get_accountid(&eve), vec!(alice.clone()), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&ferdie), vec!(dave.clone()), cid, 1, 1, 6);
         assert!(EncointerCeremonies::ballot_meetup_n_votes(&cid, 1) == None);
 
-        gets_attested_by(get_accountid(&alice), vec!(&bob), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&bob), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&charlie), vec!(&alice), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&dave), vec!(&alice), cid, 1, 1, 4);
-        gets_attested_by(get_accountid(&eve), vec!(&alice), cid, 1, 1, 6);
-        gets_attested_by(get_accountid(&ferdie), vec!(&dave), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&bob), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&charlie), vec!(alice.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&dave), vec!(alice.clone()), cid, 1, 1, 4);
+        gets_attested_by(get_accountid(&eve), vec!(alice.clone()), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&ferdie), vec!(dave.clone()), cid, 1, 1, 6);
         assert!(EncointerCeremonies::ballot_meetup_n_votes(&cid, 1) == Some((5,3)));
     });
 }
@@ -621,12 +622,12 @@ fn issue_reward_works() {
         // eve signs no one else
         // charlie collects incomplete signatures
         // dave signs ferdi and reports wrong number of participants
-        gets_attested_by(get_accountid(&alice), vec!(&bob,&charlie,&dave), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&bob), vec!(&alice,&charlie,&dave), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&charlie), vec!(&alice,&bob), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&dave), vec!(&alice,&bob,&charlie), cid, 1, 1, 6);
-        gets_attested_by(get_accountid(&eve), vec!(&alice,&bob,&charlie,&dave), cid, 1, 1, 5);
-        gets_attested_by(get_accountid(&ferdie), vec!(&dave), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&alice), vec!(bob.clone(),charlie.clone(),dave.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&bob), vec!(alice.clone(),charlie.clone(),dave.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&charlie), vec!(alice.clone(),bob.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&dave), vec!(alice.clone(),bob.clone(),charlie.clone()), cid, 1, 1, 6);
+        gets_attested_by(get_accountid(&eve), vec!(alice.clone(),bob.clone(),charlie.clone(),dave.clone()), cid, 1, 1, 5);
+        gets_attested_by(get_accountid(&ferdie), vec!(dave.clone()), cid, 1, 1, 6);
         assert_eq!(Balances::free_balance(&get_accountid(&alice)), 0);
         
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
@@ -666,29 +667,43 @@ fn perform_bootstrapping_ceremony() -> CurrencyIdentifier {
     assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
     // ATTESTING
 
-    gets_attested_by(get_accountid(&alice), vec!(   &bob,&charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
-    gets_attested_by(get_accountid(&bob), vec!(&alice,   &charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
-    gets_attested_by(get_accountid(&charlie), vec!(&alice,&bob,   &dave,&eve,&ferdie), cid, 1, 1, 6);
-    gets_attested_by(get_accountid(&dave), vec!(&alice,&bob,&charlie,   &eve,&ferdie), cid, 1, 1, 6);
-    gets_attested_by(get_accountid(&eve), vec!(&alice,&bob,&charlie,&dave,   &ferdie), cid, 1, 1, 6);
-    gets_attested_by(get_accountid(&ferdie), vec!(&alice,&bob,&charlie,&dave,&eve   ), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&alice), vec!(   bob.clone(),charlie.clone(),dave.clone(),eve.clone(),ferdie.clone()), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&bob), vec!(alice.clone(),   charlie.clone(),dave.clone(),eve.clone(),ferdie.clone()), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&charlie), vec!(alice.clone(),bob.clone(),   dave.clone(),eve.clone(),ferdie.clone()), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&dave), vec!(alice.clone(),bob.clone(),charlie.clone(),   eve.clone(),ferdie.clone()), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&eve), vec!(alice.clone(),bob.clone(),charlie.clone(),dave.clone(),   ferdie.clone()), cid, 1, 1, 6);
+    gets_attested_by(get_accountid(&ferdie), vec!(alice.clone(),bob.clone(),charlie.clone(),dave.clone(),eve.clone()   ), cid, 1, 1, 6);
 
     assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
     // REGISTERING
     cid
 }
 
-/* need keystore to proceed here
-fn fully_attest_meetup(cid: CurrencyIdentifier, mindex: MeetupIndexType) {
+
+fn fully_attest_meetup(cid: CurrencyIdentifier, keys: Vec<sr25519::Pair>, mindex: MeetupIndexType) {
     let cindex = EncointerCeremonies::current_ceremony_index();			
     let meetup = EncointerCeremonies::meetup_registry((cid, cindex), mindex);
     for p in meetup.iter() {
-        let mut others = meetup.clone();
-        others.retain(|&x| x != p);
-        gets_attested_by(p, vec!(   &bob,&charlie,&dave,&eve,&ferdie), cid, 1, 1, 6);
+        let mut others = Vec::with_capacity(meetup.len()-1);
+        println!("participant {}", p.to_ss58check());
+        for o in meetup.iter() {
+            println!("attestor {}", o.to_ss58check());
+            if o == p { 
+                println!("same same");
+                continue 
+            }
+            for pair in keys.iter() {
+                println!("checking {}", pair.public().to_ss58check());
+                if AccountId::from(pair.public().0) == *o {
+                    others.push(pair.clone());
+                }
+            }
+        }
+        println!("  length of attestors: {}", others.len());
+        gets_attested_by((*p).clone(), others, cid, cindex, 1, meetup.len() as u32);
     }
 }
-*/
+
 
 #[test]
 fn bootstrapping_works() {
@@ -779,9 +794,17 @@ fn grow_population_works() {
         register_charlie_dave_eve(cid);
         let master = AccountId::from(AccountKeyring::Alice);
         let mut participants = Vec::<sr25519::Pair>::with_capacity(64);
+        // add bootstrappers
+        participants.push(AccountKeyring::Alice.pair());
+        participants.push(AccountKeyring::Bob.pair());
+        participants.push(AccountKeyring::Charlie.pair());
+        participants.push(AccountKeyring::Dave.pair());
+        participants.push(AccountKeyring::Eve.pair());
+        participants.push(AccountKeyring::Ferdie.pair());
+
         // generate many keys and register all of them
-        let mut population_counter = 0u8;
-        while population_counter < 6 {
+        let mut population_counter = 6u8;
+        while population_counter < 13 {
             let mut entropy = [0u8; 32];
             entropy[0] = population_counter;
             let pair = sr25519::Pair::from_entropy(&entropy, None).0;
@@ -801,6 +824,10 @@ fn grow_population_works() {
 
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // WITNESSING
+        fully_attest_meetup(cid, participants.clone(), 1);
+
+        assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
+        // REGISTERING
 
 /*
 

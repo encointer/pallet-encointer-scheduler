@@ -65,13 +65,24 @@ package = "substrate-primitives"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
 
 [dev-dependencies.node-primitives]
-default-features = false
 git = "https://github.com/paritytech/substrate"
 package = "node-primitives"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
 
+[dev-dependencies.keystore]
+git = "https://github.com/paritytech/substrate"
+package = "substrate-keystore"
+rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
+
+[dev-dependencies]
+tempdir = "0.3.7"
+
+[dev-dependencies.app-crypto]
+git = "https://github.com/paritytech/substrate"
+package = "substrate-application-crypto"
+rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
+
 [dev-dependencies.externalities]
-default-features = false
 git = "https://github.com/paritytech/substrate"
 package = "substrate-externalities"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
