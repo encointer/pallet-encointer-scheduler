@@ -106,6 +106,6 @@ std = [
 	"encointer-currencies/std",
 ]
 
-[patch."https://github.com/encointer/pallet-encointer-currencies"]
-pallet-encointer-currencies = { path = "../pallet-encointer-currencies" }
-encointer-currencies-host-calls = { path = "../pallet-encointer-currencies/host-calls" }
+#[patch."https://github.com/encointer/pallet-encointer-currencies"]
+#pallet-encointer-currencies = { path = "../pallet-encointer-currencies" }
+#encointer-currencies-host-calls = { path = "../pallet-encointer-currencies/host-calls" }
