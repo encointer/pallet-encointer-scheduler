@@ -639,11 +639,11 @@ fn issue_reward_works() {
         assert_eq!(Balances::free_balance(&get_accountid(&eve)), 0);
         assert_eq!(Balances::free_balance(&get_accountid(&ferdie)), 0);
 
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&alice)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&bob)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&charlie)), Reputation::UNVERIFIED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&eve)), Reputation::UNVERIFIED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&ferdie)), Reputation::UNVERIFIED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&alice)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&bob)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&charlie)), Reputation::Unverified);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&eve)), Reputation::Unverified);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&ferdie)), Reputation::Unverified);
         
     });
 }
@@ -719,12 +719,12 @@ fn bootstrapping_works() {
 
         let cindex = EncointerCeremonies::current_ceremony_index();	
 
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&alice)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&bob)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&charlie)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&dave)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&eve)), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&ferdie)), Reputation::VERIFIED_UNLINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&alice)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&bob)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&charlie)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&dave)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&eve)), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), &get_accountid(&ferdie)), Reputation::VerifiedUnlinked);
     });
 }
 
@@ -744,8 +744,8 @@ fn register_with_reputation_works() {
         let cindex = EncointerCeremonies::current_ceremony_index();			
         
         // fake reputation registry for first ceremony
-        EncointerCeremonies::fake_reputation((cid, cindex-1), &get_accountid(&zoran), Reputation::VERIFIED_UNLINKED);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VERIFIED_UNLINKED);
+        EncointerCeremonies::fake_reputation((cid, cindex-1), &get_accountid(&zoran), Reputation::VerifiedUnlinked);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VerifiedUnlinked);
 
         let cindex = EncointerCeremonies::current_ceremony_index();
         println!("cindex {}", cindex);
@@ -758,8 +758,8 @@ fn register_with_reputation_works() {
         // for the next ceremony claiming his former attendance
         let proof = prove_attendance(get_accountid(&zoran_new), cid, cindex-1, &zoran);
         assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&zoran_new)), cid, Some(proof)));
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&zoran_new)), Reputation::UNVERIFIED_REPUTABLE);
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VERIFIED_LINKED);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&zoran_new)), Reputation::Unverified_REPUTABLE);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VerifiedLinked);
 
         // double signing (re-using reputation) fails
         let proof_second = prove_attendance(get_accountid(&yuri), cid, cindex-1, &zoran);
@@ -834,7 +834,7 @@ fn grow_population_works() {
         // register everybody again. also those who didn't have the chance last time
         for pair in participants.iter() {
             let proof = match EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&pair)) {
-                Reputation::VERIFIED_UNLINKED => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
+                Reputation::VerifiedUnlinked => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
                 _ => None
             };
             EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), cid, proof);
@@ -856,7 +856,7 @@ fn grow_population_works() {
         let cindex = EncointerCeremonies::current_ceremony_index();	
         for pair in participants.iter() {
             let proof = match EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&pair)) {
-                Reputation::VERIFIED_UNLINKED => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
+                Reputation::VerifiedUnlinked => Some(prove_attendance(get_accountid(&pair), cid, cindex-1, &pair)),
                 _ => None
             };
             EncointerCeremonies::register_participant(Origin::signed(get_accountid(&pair)), cid, proof);
@@ -878,11 +878,7 @@ fn grow_population_works() {
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(master.clone())));
         // REGISTERING
 
-
-        //verify meetup assignment rules....
-
-        // whitepaper III-B Rule 1: minimize the number of participants that have met at previous ceremony
-        
-        // whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
+        // TODO: whitepaper III-B Rule 1: minimize the number of participants that have met at previous ceremony
+        // TODO: whitepaper III-B Rule 2: maximize number of participants per meetup within 3<=N<=12 
     });
 }

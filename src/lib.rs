@@ -25,19 +25,17 @@
 
 use support::{decl_module, decl_storage, decl_event, ensure,
 	storage::{StorageDoubleMap, StorageMap, StorageValue},
-	traits::{Currency, Randomness},
+	traits::Currency,
 	dispatch::Result};
-use system::{ensure_signed, ensure_root};
+use system::ensure_signed;
 
 use rstd::prelude::*;
 use rstd::cmp::min;
 
-use primitives::{Blake2Hasher, Hasher};
 use sr_primitives::traits::{Verify, Member, CheckedAdd, IdentifyAccount};
-use sr_primitives::MultiSignature;
 use runtime_io::misc::print_utf8;
 
-use codec::{Codec, Encode, Decode};
+use codec::{Encode, Decode};
 
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
@@ -72,16 +70,16 @@ impl Default for CeremonyPhaseType {
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Reputation {
 	// no attestations for attendance claim
-	UNVERIFIED, 
+	Unverified, 
 	// no attestation yet but linked to reputation
-	UNVERIFIED_REPUTABLE,
+	UnverifiedReputable,
 	// verified former attendance that has not yet been linked to a new registration
-	VERIFIED_UNLINKED,
+	VerifiedUnlinked,
 	// verified former attendance that has already been linked to a new registration
-	VERIFIED_LINKED, 	
+	VerifiedLinked, 	
 }
 impl Default for Reputation {
-    fn default() -> Self { Reputation::UNVERIFIED }
+    fn default() -> Self { Reputation::Unverified }
 }
 
 #[derive(Encode, Decode, Copy, Clone, PartialEq, Eq, Default, Debug)]
@@ -157,19 +155,19 @@ decl_module! {
 
 			let next_phase = match current_phase {
 				CeremonyPhaseType::REGISTERING => {
-						Self::assign_meetups();
+						Self::assign_meetups()?;
 						CeremonyPhaseType::ASSIGNING
 				},
 				CeremonyPhaseType::ASSIGNING => {
 						CeremonyPhaseType::ATTESTING
 				},
 				CeremonyPhaseType::ATTESTING => {
-						Self::issue_rewards();
+						Self::issue_rewards()?;
 						let next_ceremony_index = match current_ceremony_index.checked_add(1) {
 							Some(v) => v,
 							None => 0, //deliberate wraparound
 						};
-						Self::purge_registry(current_ceremony_index);
+						Self::purge_registry(current_ceremony_index)?;
 						<CurrentCeremonyIndex>::put(next_ceremony_index);									
 						CeremonyPhaseType::REGISTERING
 				},
@@ -205,7 +203,7 @@ decl_module! {
 				ensure!(p.ceremony_index < cindex, "proof is acausal"); 
 				ensure!(p.ceremony_index >= cindex-REPUTATION_LIFETIME, "proof is outdated");
 				ensure!(Self::participant_reputation(&(p.currency_identifier, p.ceremony_index), 
-					&p.attendee_public) == Reputation::VERIFIED_UNLINKED,
+					&p.attendee_public) == Reputation::VerifiedUnlinked,
 					"former attendance has not been verified or has already been linked to other account");
 				if Self::verify_attendee_signature(p.clone()).is_err() { 
 					return Err("proof of attendance has bad signature");
@@ -213,10 +211,10 @@ decl_module! {
 	
 				// this reputation must now be burned so it can not be used again
 				<ParticipantReputation<T>>::insert(&(p.currency_identifier, p.ceremony_index), 
-					&p.attendee_public, Reputation::VERIFIED_LINKED);
+					&p.attendee_public, Reputation::VerifiedLinked);
 				// register participant as reputable
 				<ParticipantReputation<T>>::insert((cid, cindex), 
-					&sender, Reputation::UNVERIFIED_REPUTABLE);
+					&sender, Reputation::UnverifiedReputable);
 			};
 			<ParticipantRegistry<T>>::insert((cid, cindex), &new_count, &sender);
 			<ParticipantIndex<T>>::insert((cid, cindex), &sender, &new_count);
@@ -345,7 +343,7 @@ impl<T: Trait> Module<T> {
 			// TODO: upfront random permutation
 			for p in 1..=pcount {
 				let participant = <ParticipantRegistry<T>>::get((cid, cindex), &p);
-				if Self::participant_reputation((cid, cindex), &participant) == Reputation::UNVERIFIED_REPUTABLE
+				if Self::participant_reputation((cid, cindex), &participant) == Reputation::UnverifiedReputable
 					|| <encointer_currencies::Module<T>>::bootstrappers(cid).contains(&participant) 
 				{
 					reputables.push(participant);
@@ -358,7 +356,7 @@ impl<T: Trait> Module<T> {
 			let n_meetups = n/12 + 1;
 			let mut meetups = Vec::with_capacity(n_meetups);
 			let mut meetup_n_rep = vec![0; n_meetups];
-			for i in 0..n_meetups {
+			for _i in 0..n_meetups {
 				meetups.push(Vec::with_capacity(12))
 			}
 			// first, evenly assign reputables to meetups
@@ -394,7 +392,7 @@ impl<T: Trait> Module<T> {
 				for p in meetups[i].iter() {
 					<MeetupIndex<T>>::insert((cid, cindex), p, &_idx);
 				}				
-				<MeetupRegistry<T>>::insert((cid, cindex), &_idx, meetups[i].clone());
+				<MeetupRegistry<T>>::insert((cid, cindex), &_idx, m.clone());
 			}
 		}
 		Ok(())
@@ -440,7 +438,7 @@ impl<T: Trait> Module<T> {
 						continue;
 					},
 				};
-				let mut meetup_participants = Self::meetup_registry((cid, cindex), &m);
+				let meetup_participants = Self::meetup_registry((cid, cindex), &m);
 				for p in meetup_participants {
 					if Self::meetup_participant_count_vote((cid, cindex), &p) != n_confirmed {
 						print_utf8(b"skipped participant because of wrong participant count vote");
@@ -470,7 +468,7 @@ impl<T: Trait> Module<T> {
 					<balances::Module<T> as Currency<_>>::make_free_balance_be(&p, new_balance);
 					
 					<ParticipantReputation<T>>::insert((cid, cindex), 
-						&p, Reputation::VERIFIED_UNLINKED);
+						&p, Reputation::VerifiedUnlinked);
 				}
 			}
 		}
@@ -487,7 +485,7 @@ impl<T: Trait> Module<T> {
 				n if n > 0 => n,
 				_ => continue,
 			};
-			match n_vote_candidates.iter().position(|&(n,c)| n == this_vote) {
+			match n_vote_candidates.iter().position(|&(n,_c)| n == this_vote) {
 				Some(idx) => n_vote_candidates[idx].1 += 1,
 				_ => n_vote_candidates.insert(0, (this_vote,1)),
 			};
