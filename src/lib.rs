@@ -179,6 +179,15 @@ decl_module! {
 			Ok(())
 		}
 
+		pub fn grant_reputation(origin, cid: CurrencyIdentifier, reputable: T::AccountId) -> Result {
+			let sender = ensure_signed(origin)?;
+			ensure!(sender == <CeremonyMaster<T>>::get(), "only the CeremonyMaster can call this function");
+			let current_phase = <CurrentPhase>::get();
+			let cindex = <CurrentCeremonyIndex>::get();
+			<ParticipantReputation<T>>::insert(&(cid, cindex-1), reputable, Reputation::VerifiedUnlinked);
+			Ok(())
+		}
+
 		pub fn register_participant(origin, cid: CurrencyIdentifier, proof: Option<ProofOfAttendance<T::Signature, T::AccountId>>) -> Result {
 			let sender = ensure_signed(origin)?;
 			ensure!(<CurrentPhase>::get() == CeremonyPhaseType::REGISTERING,
@@ -384,6 +393,8 @@ impl<T: Trait> Module<T> {
 			}
 			for i in toosmall { meetups.remove(i); }
 			// FIXME: with nightly we could do: meetups.drain_filter(|x| x.len() < 3).collect::<Vec<_>>();
+			
+			if meetups.is_empty() { return Ok(()) };
 			
 			// commit result to state
 			<MeetupCount>::insert((cid, cindex), n_meetups as MeetupIndexType);	

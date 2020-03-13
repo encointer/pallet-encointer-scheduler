@@ -23,10 +23,10 @@ use super::*;
 use crate::{GenesisConfig, Module, Trait};
 use support::{impl_outer_event, impl_outer_origin, parameter_types, assert_ok};
 use sr_primitives::traits::{Verify, Member, CheckedAdd, IdentifyAccount};
-use sr_primitives::{Perbill, traits::{IdentityLookup, BlakeTwo256}, testing::Header};
+use sr_primitives::{MultiSignature, Perbill, traits::{IdentityLookup, BlakeTwo256}, testing::Header};
 use std::{collections::HashSet, cell::RefCell};
 use externalities::set_and_run_with_externalities;
-use primitives::{H256, Blake2Hasher, Pair, Public, sr25519};
+use primitives::{H256, Blake2Hasher, Pair, Public, sr25519, hashing::blake2_256};
 use primitives::crypto::{Ss58Codec};
 use support::traits::{Currency, Get, FindAuthor, LockIdentifier};
 use sr_primitives::weights::Weight;
@@ -212,9 +212,8 @@ fn register_test_currency() -> CurrencyIdentifier {
     let c = Location {lat: 1_000_000, lon: 3_000_000 };
     let loc = vec!(a,b,c);
     let bs = vec!(alice.clone(), bob.clone(), charlie.clone(), dave.clone(), eve.clone(), ferdie.clone());
-    let cid = CurrencyIdentifier::default();
-    assert_ok!(EncointerCurrencies::new_currency(Origin::signed(alice.clone()), cid, loc, bs));
-    cid
+    assert_ok!(EncointerCurrencies::new_currency(Origin::signed(alice.clone()), loc.clone(), bs.clone()));
+    CurrencyIdentifier::from(blake2_256(&(loc, bs).encode()))
 }
 
 #[test]
@@ -729,6 +728,16 @@ fn bootstrapping_works() {
 }
 
 #[test]
+fn grant_reputation_works() {
+    ExtBuilder::build().execute_with(|| {
+        let cid = perform_bootstrapping_ceremony();
+        let master = AccountId::from(AccountKeyring::Alice);
+        // a non-bootstrapper
+        let zoran = sr25519::Pair::from_entropy(&[9u8; 32], None).0;
+        assert_ok!(EncointerCeremonies::grant_reputation(Origin::signed(master.clone()), cid, get_accountid(&zoran)));
+    });
+}
+#[test]
 fn register_with_reputation_works() {
     ExtBuilder::build().execute_with(|| {
         let cid = perform_bootstrapping_ceremony();
@@ -758,7 +767,7 @@ fn register_with_reputation_works() {
         // for the next ceremony claiming his former attendance
         let proof = prove_attendance(get_accountid(&zoran_new), cid, cindex-1, &zoran);
         assert_ok!(EncointerCeremonies::register_participant(Origin::signed(get_accountid(&zoran_new)), cid, Some(proof)));
-        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&zoran_new)), Reputation::Unverified_REPUTABLE);
+        assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex), get_accountid(&zoran_new)), Reputation::UnverifiedReputable);
         assert_eq!(EncointerCeremonies::participant_reputation((cid, cindex-1), get_accountid(&zoran)), Reputation::VerifiedLinked);
 
         // double signing (re-using reputation) fails
