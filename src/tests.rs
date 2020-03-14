@@ -97,6 +97,7 @@ impl system::Trait for TestRuntime {
 
 pub type System = system::Module<TestRuntime>;
 
+/*
 parameter_types! {
     pub const TransferFee: Balance = 0;
     pub const CreationFee: Balance = 0;
@@ -115,6 +116,14 @@ impl balances::Trait for TestRuntime {
     type CreationFee = CreationFee;
 }
 pub type Balances = balances::Module<TestRuntime>;
+*/
+impl encointer_balances::Trait for TestRuntime {
+	type Event = ();
+	type Balance = Balance;
+	type Amount = i64;    
+}
+
+pub type EncointerBalances = encointer_balances::Module<TestRuntime>;
 
 type AccountPublic = <Signature as Verify>::Signer;
 
@@ -125,12 +134,6 @@ impl ExtBuilder {
         let mut storage = system::GenesisConfig::default()
             .build_storage::<TestRuntime>()
             .unwrap();
-        balances::GenesisConfig::<TestRuntime> {
-            balances: vec![],
-            vesting: vec![],
-        }
-        .assimilate_storage(&mut storage)
-        .unwrap();
         encointer_currencies::GenesisConfig::<TestRuntime> {
             currency_master: AccountId::from(AccountKeyring::Alice),
         }
@@ -935,18 +938,18 @@ fn issue_reward_works() {
             5,
         );
         gets_attested_by(get_accountid(&ferdie), vec![dave.clone()], cid, 1, 1, 6);
-        assert_eq!(Balances::free_balance(&get_accountid(&alice)), 0);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&alice)), 0);
 
         assert_ok!(EncointerCeremonies::next_phase(Origin::signed(
             master.clone()
         )));
         // REGISTERING
 
-        assert_eq!(Balances::free_balance(&get_accountid(&alice)), REWARD);
-        assert_eq!(Balances::free_balance(&get_accountid(&bob)), REWARD);
-        assert_eq!(Balances::free_balance(&get_accountid(&charlie)), 0);
-        assert_eq!(Balances::free_balance(&get_accountid(&eve)), 0);
-        assert_eq!(Balances::free_balance(&get_accountid(&ferdie)), 0);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&alice)), REWARD);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&bob)), REWARD);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&charlie)), 0);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&eve)), 0);
+        assert_eq!(EncointerBalances::balance(&cid, &get_accountid(&ferdie)), 0);
 
         assert_eq!(
             EncointerCeremonies::participant_reputation((cid, cindex), &get_accountid(&alice)),

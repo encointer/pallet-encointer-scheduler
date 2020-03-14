@@ -35,6 +35,11 @@ default-features = false
 git = "https://github.com/encointer/pallet-encointer-currencies"
 package = "pallet-encointer-currencies"
 
+[dependencies.encointer-balances]
+default-features = false
+git = "https://github.com/encointer/pallet-encointer-balances"
+package = "pallet-encointer-balances"
+
 [dependencies.codec]
 default-features = false
 package = "parity-scale-codec"
@@ -106,6 +111,9 @@ std = [
 	"encointer-currencies/std",
 ]
 
-#[patch."https://github.com/encointer/pallet-encointer-currencies"]
-#pallet-encointer-currencies = { path = "../pallet-encointer-currencies" }
-#encointer-currencies-host-calls = { path = "../pallet-encointer-currencies/host-calls" }
+[patch."https://github.com/encointer/pallet-encointer-currencies"]
+pallet-encointer-currencies = { path = "../pallet-encointer-currencies" }
+encointer-currencies-host-calls = { path = "../pallet-encointer-currencies/host-calls" }
+
+[patch."https://github.com/encointer/pallet-encointer-balances"]
+pallet-encointer-balances = { path = "../pallet-encointer-balances" }

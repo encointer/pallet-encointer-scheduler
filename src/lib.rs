@@ -28,7 +28,6 @@ use support::{
     dispatch::Result,
     ensure,
     storage::{StorageDoubleMap, StorageMap, StorageValue},
-    traits::Currency,
 };
 use system::ensure_signed;
 
@@ -36,7 +35,7 @@ use rstd::cmp::min;
 use rstd::prelude::*;
 
 use runtime_io::misc::print_utf8;
-use sr_primitives::traits::{CheckedAdd, IdentifyAccount, Member, Verify};
+use sr_primitives::traits::{IdentifyAccount, Member, Verify};
 
 use codec::{Decode, Encode};
 
@@ -44,8 +43,13 @@ use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use encointer_currencies::CurrencyIdentifier;
+use encointer_balances::traits::MultiCurrency;
 
-pub trait Trait: system::Trait + balances::Trait + encointer_currencies::Trait {
+pub trait Trait: system::Trait 
+    //+ balances::Trait 
+    + encointer_currencies::Trait 
+    + encointer_balances::Trait 
+{
     type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
     type Public: IdentifyAccount<AccountId = Self::AccountId>;
     type Signature: Verify<Signer = Self::Public> + Member + Decode + Encode;
@@ -188,7 +192,6 @@ decl_module! {
         pub fn grant_reputation(origin, cid: CurrencyIdentifier, reputable: T::AccountId) -> Result {
             let sender = ensure_signed(origin)?;
             ensure!(sender == <CeremonyMaster<T>>::get(), "only the CeremonyMaster can call this function");
-            let current_phase = <CurrentPhase>::get();
             let cindex = <CurrentCeremonyIndex>::get();
             <ParticipantReputation<T>>::insert(&(cid, cindex-1), reputable, Reputation::VerifiedUnlinked);
             Ok(())
@@ -312,6 +315,7 @@ decl_event!(
 );
 
 impl<T: Trait> Module<T> {
+
     fn purge_registry(cindex: CeremonyIndexType) -> Result {
         let cids = <encointer_currencies::Module<T>>::currency_identifiers();
         for cid in cids.iter() {
@@ -506,12 +510,10 @@ impl<T: Trait> Module<T> {
                     // TODO: check that p also signed others
                     // participant merits reward
                     print_utf8(b"participant merits reward");
-                    let old_balance = <balances::Module<T>>::free_balance(&p);
-                    let new_balance = old_balance
-                        .checked_add(&reward)
-                        .expect("Balance should never overflow");
-                    <balances::Module<T> as Currency<_>>::make_free_balance_be(&p, new_balance);
-
+                    match <encointer_balances::Module<T> as MultiCurrency<_>>::deposit(*cid, &p, reward) {
+                        Ok(()) => (),
+                        _ => return Err("could not issue reward")
+                    };
                     <ParticipantReputation<T>>::insert(
                         (cid, cindex),
                         &p,
