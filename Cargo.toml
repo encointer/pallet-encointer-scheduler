@@ -6,11 +6,6 @@ edition = "2018"
 
 [dependencies]
 
-[dependencies.encointer-ceremonies]
-default-features = false
-git = "https://github.com/encointer/pallet-encointer-ceremonies"
-package = "pallet-encointer-ceremonies"
-
 [dependencies.rstd]
 default-features = false
 git = "https://github.com/paritytech/substrate"
@@ -96,8 +91,4 @@ std = [
 	"sr-primitives/std",
 	"support/std",
 	"system/std",
-	"encointer-ceremonies/std",
 ]
-
-[patch."https://github.com/encointer/pallet-encointer-ceremonies"]
-pallet-encointer-ceremonies = { path = "../pallet-encointer-ceremonies" }

@@ -28,14 +28,9 @@ use support::{
     storage::StorageValue,
 };
 use system::ensure_signed;
-
-
 use rstd::prelude::*;
-
 use runtime_io::misc::print_utf8;
-
 use codec::{Decode, Encode};
-
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
@@ -62,7 +57,7 @@ impl Default for CeremonyPhaseType {
 
 // This module's storage items.
 decl_storage! {
-    trait Store for Module<T: Trait> as EncointerCeremonies {
+    trait Store for Module<T: Trait> as EncointerScheduler {
         // caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
         CurrentCeremonyIndex get(current_ceremony_index) config(): CeremonyIndexType;
         LastCeremonyBlock get(last_ceremony_block): T::BlockNumber;
