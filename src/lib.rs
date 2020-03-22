@@ -37,6 +37,7 @@ use serde::{Deserialize, Serialize};
 pub trait Trait: system::Trait 
 {
     type Event: From<Event> + Into<<Self as system::Trait>::Event>;
+	type OnCeremonyPhaseChange: OnCeremonyPhaseChange;
 }
 
 pub type CeremonyIndexType = u32;
@@ -53,6 +54,17 @@ impl Default for CeremonyPhaseType {
     fn default() -> Self {
         CeremonyPhaseType::REGISTERING
     }
+}
+
+/// An event handler for when the ceremony phase changes.
+pub trait OnCeremonyPhaseChange {
+	fn on_ceremony_phase_change(
+		new_phase: CeremonyPhaseType,
+	);
+}
+
+impl OnCeremonyPhaseChange for () {
+    fn on_ceremony_phase_change(_: CeremonyPhaseType) { () }
 }
 
 // This module's storage items.
@@ -97,6 +109,7 @@ decl_module! {
             };
 
             <CurrentPhase>::put(next_phase);
+            T::OnCeremonyPhaseChange::on_ceremony_phase_change(next_phase);
             Self::deposit_event(Event::PhaseChangedTo(next_phase));
             print_utf8(b"phase changed");
             Ok(())
