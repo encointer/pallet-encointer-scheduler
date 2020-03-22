@@ -1,10 +1,15 @@
 [package]
-name = "pallet-encointer-ceremonies"
+name = "pallet-encointer-scheduler"
 version = "0.1.0"
 authors = ["encointer.org <alain@encointer.org>"]
 edition = "2018"
 
 [dependencies]
+
+[dependencies.encointer-ceremonies]
+default-features = false
+git = "https://github.com/encointer/pallet-encointer-ceremonies"
+package = "pallet-encointer-ceremonies"
 
 [dependencies.rstd]
 default-features = false
@@ -23,22 +28,6 @@ default-features = false
 git = "https://github.com/paritytech/substrate"
 package = "sr-primitives"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
-
-[dependencies.balances]
-default-features = false
-git = "https://github.com/paritytech/substrate"
-package = "pallet-balances"
-rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
-
-[dependencies.encointer-currencies]
-default-features = false
-git = "https://github.com/encointer/pallet-encointer-currencies"
-package = "pallet-encointer-currencies"
-
-[dependencies.encointer-balances]
-default-features = false
-git = "https://github.com/encointer/pallet-encointer-balances"
-package = "pallet-encointer-balances"
 
 [dependencies.codec]
 default-features = false
@@ -100,7 +89,6 @@ rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
 [features]
 default = ["std"]
 std = [
-	"balances/std",
 	"codec/std",
 	"rstd/std",
 	"runtime-io/std",
@@ -108,12 +96,8 @@ std = [
 	"sr-primitives/std",
 	"support/std",
 	"system/std",
-	"encointer-currencies/std",
+	"encointer-ceremonies/std",
 ]
 
-[patch."https://github.com/encointer/pallet-encointer-currencies"]
-pallet-encointer-currencies = { path = "../pallet-encointer-currencies" }
-encointer-currencies-host-calls = { path = "../pallet-encointer-currencies/host-calls" }
-
-[patch."https://github.com/encointer/pallet-encointer-balances"]
-pallet-encointer-balances = { path = "../pallet-encointer-balances" }
+[patch."https://github.com/encointer/pallet-encointer-ceremonies"]
+pallet-encointer-ceremonies = { path = "../pallet-encointer-ceremonies" }
