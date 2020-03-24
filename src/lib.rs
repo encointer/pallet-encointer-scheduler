@@ -95,7 +95,7 @@ decl_module! {
         pub fn next_phase(origin) -> Result {
             let sender = ensure_signed(origin)?;
             ensure!(sender == <CeremonyMaster<T>>::get(), "only the CeremonyMaster can call this function");
-            Self::progress_phase();
+            Self::progress_phase()?;
             Ok(())
         }
     }
@@ -118,19 +118,16 @@ impl<T: Trait> Module<T> {
 
         let next_phase = match current_phase {
             CeremonyPhaseType::REGISTERING => {
-                    //Self::assign_meetups()?;
                     CeremonyPhaseType::ASSIGNING
             },
             CeremonyPhaseType::ASSIGNING => {
                     CeremonyPhaseType::ATTESTING
             },
             CeremonyPhaseType::ATTESTING => {
-                    //Self::issue_rewards()?;
                     let next_ceremony_index = match current_ceremony_index.checked_add(1) {
                         Some(v) => v,
                         None => 0, //deliberate wraparound
                     };
-                    //Self::purge_registry(current_ceremony_index)?;
                     <CurrentCeremonyIndex>::put(next_ceremony_index);
                     CeremonyPhaseType::REGISTERING
             },
@@ -158,7 +155,7 @@ impl<T: Trait> Module<T> {
                 .expect("overflowing timestamp");
             <NextPhaseTimestamp<T>>::put(next);
         } else if Self::next_phase_timestamp() < now {
-            Self::progress_phase();
+            Self::progress_phase().expect("phase progress error");
         }
     }
 }
