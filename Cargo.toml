@@ -75,6 +75,11 @@ git = "https://github.com/paritytech/substrate"
 package = "substrate-keystore"
 rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
 
+[dev-dependencies.inherents]
+git = "https://github.com/paritytech/substrate"
+package = "substrate-inherents"
+rev = "3bf9540e72df5ecb3955845764dfee7dcdbb26b5"
+
 [dev-dependencies]
 tempdir = "0.3.7"
 

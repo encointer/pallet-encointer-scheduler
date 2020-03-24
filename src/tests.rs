@@ -19,8 +19,11 @@ use sr_primitives::{
 	Perbill,
 };
 use primitives::H256;
-use support::{assert_ok, impl_outer_origin, impl_outer_event, parameter_types};
+use support::{assert_ok, impl_outer_origin, impl_outer_event, parameter_types,
+        storage::StorageValue};
 use runtime_io::TestExternalities;
+use inherents::ProvideInherent;
+use std::ops::Rem;
 
 impl_outer_origin! {
 	pub enum Origin for TestRuntime {}
@@ -153,29 +156,38 @@ fn timestamp_callback_works() {
         const GENESIS_TIME: u64 = 1_585_058_843_000;
         const ONE_DAY: u64 = 86_400_000;
         
-        Timestamp::set_timestamp(GENESIS_TIME);
+        let _ = Timestamp::dispatch(<timestamp::Module<TestRuntime> as ProvideInherent>::Call::
+            set(GENESIS_TIME), Origin::NONE);
+
         assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
         assert_eq!(
             EncointerScheduler::current_phase(),
             CeremonyPhaseType::REGISTERING
         );
-        assert_eq!(EncointerScheduler::next_phase_timestamp(), GENESIS_TIME + ONE_DAY);
+        assert_eq!(EncointerScheduler::next_phase_timestamp(), 
+            (GENESIS_TIME - GENESIS_TIME.rem(ONE_DAY)) + ONE_DAY);
 
-        Timestamp::set_timestamp(GENESIS_TIME + ONE_DAY);
+        // fake next block
+        //<timestamp::Module<TestRuntime> as Trait>::DidUpdate::put(false);
+
+        let _ = Timestamp::dispatch(<timestamp::Module<TestRuntime> as ProvideInherent>::Call::
+            set(GENESIS_TIME + ONE_DAY), Origin::NONE);
         assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
         assert_eq!(
             EncointerScheduler::current_phase(),
             CeremonyPhaseType::ASSIGNING
         );
 
-        Timestamp::set_timestamp(GENESIS_TIME + 2*ONE_DAY);
+        let _ = Timestamp::dispatch(<timestamp::Module<TestRuntime> as ProvideInherent>::Call::
+            set(GENESIS_TIME + 2 * ONE_DAY), Origin::NONE);
         assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
         assert_eq!(
             EncointerScheduler::current_phase(),
             CeremonyPhaseType::ATTESTING
         );
 
-        Timestamp::set_timestamp(GENESIS_TIME + 3*ONE_DAY);
+        let _ = Timestamp::dispatch(<timestamp::Module<TestRuntime> as ProvideInherent>::Call::
+            set(GENESIS_TIME + 3 * ONE_DAY), Origin::NONE);
         assert_eq!(EncointerScheduler::current_ceremony_index(), 2);
         assert_eq!(
             EncointerScheduler::current_phase(),
