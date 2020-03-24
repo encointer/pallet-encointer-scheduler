@@ -37,8 +37,13 @@ impl_outer_event! {
 	}
 }
 
+parameter_types! {
+	pub const MomentsPerDay: u64 = 86_400_000; // [ms/d]
+}
 impl Trait for TestRuntime {
-	type Event = TestEvent;
+    type Event = TestEvent;
+    type OnCeremonyPhaseChange = ();
+    type MomentsPerDay = MomentsPerDay;
 }
 
 type AccountId = u64;
@@ -71,6 +76,15 @@ impl system::Trait for TestRuntime {
 	type Version = ();
 }
 
+parameter_types! {
+    pub const MinimumPeriod: u64 = 1;
+}
+impl timestamp::Trait for TestRuntime {
+	type Moment = u64;
+	type OnTimestampSet = EncointerScheduler;
+	type MinimumPeriod = MinimumPeriod;
+}
+
 pub struct ExtBuilder;
 
 const MASTER: AccountId = 0;
@@ -83,6 +97,11 @@ impl ExtBuilder {
         GenesisConfig::<TestRuntime> {
             current_ceremony_index: 1,
             ceremony_master: MASTER,
+            phase_durations: vec![
+                (CeremonyPhaseType::REGISTERING, 86_400_000),
+                (CeremonyPhaseType::ASSIGNING, 86_400_000),
+                (CeremonyPhaseType::ATTESTING, 86_400_000),
+            ]
         }
         .assimilate_storage(&mut storage)
         .unwrap();
@@ -90,6 +109,7 @@ impl ExtBuilder {
     }
 }
 
+pub type Timestamp = timestamp::Module<TestRuntime>;
 pub type EncointerScheduler = Module<TestRuntime>;
 
 
@@ -126,3 +146,41 @@ fn ceremony_phase_statemachine_works() {
     });
 }
 
+#[test]
+fn timestamp_callback_works() {
+    ExtBuilder::build().execute_with(|| {
+        //large offset since 1970 to when first block is generated
+        const GENESIS_TIME: u64 = 1_585_058_843_000;
+        const ONE_DAY: u64 = 86_400_000;
+        
+        Timestamp::set_timestamp(GENESIS_TIME);
+        assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
+        assert_eq!(
+            EncointerScheduler::current_phase(),
+            CeremonyPhaseType::REGISTERING
+        );
+        assert_eq!(EncointerScheduler::next_phase_timestamp(), GENESIS_TIME + ONE_DAY);
+
+        Timestamp::set_timestamp(GENESIS_TIME + ONE_DAY);
+        assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
+        assert_eq!(
+            EncointerScheduler::current_phase(),
+            CeremonyPhaseType::ASSIGNING
+        );
+
+        Timestamp::set_timestamp(GENESIS_TIME + 2*ONE_DAY);
+        assert_eq!(EncointerScheduler::current_ceremony_index(), 1);
+        assert_eq!(
+            EncointerScheduler::current_phase(),
+            CeremonyPhaseType::ATTESTING
+        );
+
+        Timestamp::set_timestamp(GENESIS_TIME + 3*ONE_DAY);
+        assert_eq!(EncointerScheduler::current_ceremony_index(), 2);
+        assert_eq!(
+            EncointerScheduler::current_phase(),
+            CeremonyPhaseType::REGISTERING
+        );
+
+    });
+}
