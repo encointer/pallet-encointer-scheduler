@@ -13,7 +13,7 @@
 //  limitations under the License.
 
 use crate::{Module, Trait, CeremonyPhaseType, GenesisConfig};
-use sr_primitives::{
+use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup, OnFinalize, OnInitialize},
 	Perbill,
