@@ -36,7 +36,7 @@ mod simple_event {
 impl_outer_event! {
 	pub enum TestEvent for TestRuntime {
 		simple_event,
-		//system<T>,
+		system<T>,
 	}
 }
 
@@ -76,7 +76,11 @@ impl system::Trait for TestRuntime {
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
-	type Version = ();
+    type Version = ();
+	type ModuleToIndex = ();
+	type AccountData = ();
+	type OnNewAccount = ();
+	type OnKilledAccount = ();    
 }
 
 parameter_types! {
