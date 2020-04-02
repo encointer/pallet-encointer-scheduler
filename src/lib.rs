@@ -82,7 +82,7 @@ decl_storage! {
         CurrentPhase get(fn current_phase): CeremonyPhaseType = CeremonyPhaseType::REGISTERING;
         CeremonyMaster get(fn ceremony_master) config(): T::AccountId;
         NextPhaseTimestamp get(fn next_phase_timestamp): T::Moment;
-        PhaseDurations get(fn phase_durations) config(): map hasher(opaque_blake2_256) CeremonyPhaseType => T::Moment;
+        PhaseDurations get(fn phase_durations) config(): map hasher(blake2_128_concat) CeremonyPhaseType => T::Moment;
     }
 }
 
