@@ -31,7 +31,7 @@ use support::{
 use system::ensure_signed;
 use sp_timestamp::OnTimestampSet;
 use rstd::prelude::*;
-use runtime_io::misc::print_utf8;
+use runtime_io::misc::{print_utf8, print_hex};
 use codec::{Decode, Encode};
 use sp_runtime::traits::{CheckedAdd, Zero};
 use rstd::ops::Rem;
@@ -141,7 +141,8 @@ impl<T: Trait> Module<T> {
         <CurrentPhase>::put(next_phase);
         T::OnCeremonyPhaseChange::on_ceremony_phase_change(next_phase);
         Self::deposit_event(Event::PhaseChangedTo(next_phase));
-        print_utf8(b"phase changed");
+        print_utf8(b"phase changed to:");
+        print_hex(&next_phase.encode());
         Ok(())
 
     }
