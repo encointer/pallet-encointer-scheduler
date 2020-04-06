@@ -79,7 +79,7 @@ decl_storage! {
         // caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
         CurrentCeremonyIndex get(fn current_ceremony_index) config(): CeremonyIndexType;
         LastCeremonyBlock get(fn last_ceremony_block): T::BlockNumber;
-        CurrentPhase get(fn current_phase): CeremonyPhaseType = CeremonyPhaseType::REGISTERING;
+        CurrentPhase get(fn current_phase) config(): CeremonyPhaseType = CeremonyPhaseType::REGISTERING;
         CeremonyMaster get(fn ceremony_master) config(): T::AccountId;
         NextPhaseTimestamp get(fn next_phase_timestamp): T::Moment;
         PhaseDurations get(fn phase_durations) config(): map hasher(blake2_128_concat) CeremonyPhaseType => T::Moment;

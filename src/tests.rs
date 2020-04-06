@@ -102,6 +102,7 @@ impl ExtBuilder {
             .build_storage::<TestRuntime>()
             .unwrap();
         GenesisConfig::<TestRuntime> {
+            current_phase: CeremonyPhaseType::REGISTERING,
             current_ceremony_index: 1,
             ceremony_master: MASTER,
             phase_durations: vec![
