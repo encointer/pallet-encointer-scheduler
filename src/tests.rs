@@ -13,7 +13,7 @@
 //  limitations under the License.
 
 use crate::{Module, Trait, CeremonyPhaseType, GenesisConfig};
-use sr_primitives::{
+use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup, OnFinalize, OnInitialize},
 	Perbill,
@@ -36,7 +36,7 @@ mod simple_event {
 impl_outer_event! {
 	pub enum TestEvent for TestRuntime {
 		simple_event,
-		//system<T>,
+		system<T>,
 	}
 }
 
@@ -76,7 +76,11 @@ impl system::Trait for TestRuntime {
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
-	type Version = ();
+    type Version = ();
+	type ModuleToIndex = ();
+	type AccountData = ();
+	type OnNewAccount = ();
+	type OnKilledAccount = ();    
 }
 
 parameter_types! {
@@ -98,6 +102,7 @@ impl ExtBuilder {
             .build_storage::<TestRuntime>()
             .unwrap();
         GenesisConfig::<TestRuntime> {
+            current_phase: CeremonyPhaseType::REGISTERING,
             current_ceremony_index: 1,
             ceremony_master: MASTER,
             phase_durations: vec![

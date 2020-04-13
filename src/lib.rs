@@ -23,7 +23,7 @@
 
 use support::{
     decl_event, decl_module, decl_storage,
-    dispatch::Result,
+    dispatch::DispatchResult,
     ensure,
     storage::StorageValue,
     traits::Get,
@@ -31,9 +31,9 @@ use support::{
 use system::ensure_signed;
 use sp_timestamp::OnTimestampSet;
 use rstd::prelude::*;
-use runtime_io::misc::print_utf8;
+use runtime_io::misc::{print_utf8, print_hex};
 use codec::{Decode, Encode};
-use sr_primitives::traits::{CheckedAdd, Zero};
+use sp_runtime::traits::{CheckedAdd, Zero};
 use rstd::ops::Rem;
 
 #[cfg(feature = "std")]
@@ -77,12 +77,12 @@ impl OnCeremonyPhaseChange for () {
 decl_storage! {
     trait Store for Module<T: Trait> as EncointerScheduler {
         // caution: index starts with 1, not 0! (because null and 0 is the same for state storage)
-        CurrentCeremonyIndex get(current_ceremony_index) config(): CeremonyIndexType;
-        LastCeremonyBlock get(last_ceremony_block): T::BlockNumber;
-        CurrentPhase get(current_phase): CeremonyPhaseType = CeremonyPhaseType::REGISTERING;
-        CeremonyMaster get(ceremony_master) config(): T::AccountId;
-        NextPhaseTimestamp get(next_phase_timestamp): T::Moment;
-        PhaseDurations get(phase_durations) config(): map CeremonyPhaseType => T::Moment;
+        CurrentCeremonyIndex get(fn current_ceremony_index) config(): CeremonyIndexType;
+        LastCeremonyBlock get(fn last_ceremony_block): T::BlockNumber;
+        CurrentPhase get(fn current_phase) config(): CeremonyPhaseType = CeremonyPhaseType::REGISTERING;
+        CeremonyMaster get(fn ceremony_master) config(): T::AccountId;
+        NextPhaseTimestamp get(fn next_phase_timestamp): T::Moment = T::Moment::from(0);
+        PhaseDurations get(fn phase_durations) config(): map hasher(blake2_128_concat) CeremonyPhaseType => T::Moment;
     }
 }
 
@@ -92,7 +92,7 @@ decl_module! {
 
         fn deposit_event() = default;
 
-        pub fn next_phase(origin) -> Result {
+        pub fn next_phase(origin) -> DispatchResult {
             let sender = ensure_signed(origin)?;
             ensure!(sender == <CeremonyMaster<T>>::get(), "only the CeremonyMaster can call this function");
             Self::progress_phase()?;
@@ -110,7 +110,7 @@ decl_event!(
 impl<T: Trait> Module<T> {
     // implicitly assuming Moment to be unix epoch!
   
-    fn progress_phase() -> Result {
+    fn progress_phase() -> DispatchResult {
         let current_phase = <CurrentPhase>::get();
         let current_ceremony_index = <CurrentCeremonyIndex>::get();
         
@@ -141,7 +141,8 @@ impl<T: Trait> Module<T> {
         <CurrentPhase>::put(next_phase);
         T::OnCeremonyPhaseChange::on_ceremony_phase_change(next_phase);
         Self::deposit_event(Event::PhaseChangedTo(next_phase));
-        print_utf8(b"phase changed");
+        print_utf8(b"phase changed to:");
+        print_hex(&next_phase.encode());
         Ok(())
 
     }
