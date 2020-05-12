@@ -27,6 +27,7 @@ use support::{
     ensure,
     storage::StorageValue,
     traits::Get,
+    weights::{DispatchClass, Pays}
 };
 use system::ensure_signed;
 use sp_timestamp::OnTimestampSet;
@@ -92,6 +93,7 @@ decl_module! {
 
         fn deposit_event() = default;
 
+        #[weight = (1000, DispatchClass::Operational, Pays::No)]
         pub fn next_phase(origin) -> DispatchResult {
             let sender = ensure_signed(origin)?;
             ensure!(sender == <CeremonyMaster<T>>::get(), "only the CeremonyMaster can call this function");
